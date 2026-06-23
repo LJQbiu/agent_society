@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+.npm
+
+# Environment / Secrets
+.env
+.env.local
+.env.production
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Agent Bootstrap state (local only)
+agents_state.json
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+htmlcov/

@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+}
+
+@layer components {
+  /* 按钮 */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium
+           transition-colors duration-150 cursor-pointer border border-transparent;
+  }
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-400;
+  }
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300;
+  }
+  .btn-outline {
+    @apply border-gray-300 text-gray-700 hover:bg-gray-50;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
+
+  /* 输入框 */
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-sm
+           focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400
+           placeholder-gray-400;
+  }
+
+  /* 卡片 */
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200;
+  }
+
+  /* 标签 */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-green {
+    @apply bg-green-100 text-green-800;
+  }
+  .badge-blue {
+    @apply bg-blue-100 text-blue-800;
+  }
+  .badge-yellow {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+  .badge-red {
+    @apply bg-red-100 text-red-800;
+  }
+
+  /* 表格 */
+  .table-row {
+    @apply border-b border-gray-200 hover:bg-gray-50;
+  }
+}
+
+/* Toast animations */
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes toast-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+.toast-enter {
+  animation: toast-in 0.3s ease-out;
+}
+.toast-exit {
+  animation: toast-out 0.3s ease-in;
+}

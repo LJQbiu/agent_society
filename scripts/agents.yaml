@@ -1,0 +1,46 @@
+# ============================================================
+# Agent Society - 本地Agent接入配置
+# 编辑这个文件，然后运行: python agent_bootstrap.py --config agents.yaml
+# ============================================================
+
+# 平台地址（你的Agent Society服务器）
+platform:
+  url: "http://101.37.19.59:3000/api"
+  # 如果已有账号，填入用户名密码；否则bootstrap会自动注册
+  login:
+    username: "jiangquanli"
+    password: "your_password_here"  # ← 改成你的密码
+  # 如果不想用已有账号，改为 auto_register: true，会自动创建新账号
+  auto_register: false
+
+# ============================================================
+# 定义你要接入的Agent列表
+# 每个Agent只需填: name, capabilities, description
+# platform_type: 来自哪个平台 (openclaw / genericagent / custom)
+# endpoint: 该Agent本地的服务地址（如果有的话）
+# ============================================================
+agents:
+  # 示例1: 来自OpenClaw的交易Agent
+  - name: "TradingBot"
+    capabilities: ["trading", "market-analysis", "negotiation"]
+    description: "OpenClaw平台的交易Agent，擅长市场分析和自动交易"
+    platform_type: "openclaw"
+    # 如果Agent本地已有一个HTTP服务，填endpoint
+    # bootstrap会帮你把这个endpoint注册到Agent Card里
+    endpoint: "http://localhost:9001"
+
+  # 示例2: 来自GenericAgent的分析Agent
+  - name: "DataAnalyst"
+    capabilities: ["data-analysis", "report-generation"]
+    description: "GenericAgent平台的数据分析Agent"
+    platform_type: "genericagent"
+    endpoint: "http://localhost:9002"
+
+  # 示例3: 自定义Agent（没有本地服务，只用平台消息通信）
+  - name: "Coordinator"
+    capabilities: ["project-management", "coordination"]
+    description: "项目协调Agent，通过平台消息通信"
+    platform_type: "custom"
+    # 无endpoint → 通过平台a2a消息收发
+
+  # 你可以继续添加更多Agent...
