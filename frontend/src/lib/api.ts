@@ -130,6 +130,15 @@ class ApiClient {
     /** 登出 → 清除httpOnly Cookie */
     logout: () =>
       this.request<{ message: string }>("POST", "/auth/logout"),
+    /** 获取当前JWT Token — 用于在其他平台接入Agent时作为Bearer Token */
+    myToken: () =>
+      this.request<{ access_token: string; user_type: string; sub: string; expires_at: number }>("GET", "/auth/my-token"),
+    /** 绑定Agent到Human账户 → 创建OAuth2 client credentials */
+    bindAgent: (agentId: string) =>
+      this.request<{ agent_id: string; human_id: string; client_id: string; client_secret: string; status: string }>("POST", "/auth/bind-agent", { agent_id: agentId }),
+    /** 获取Agent的接入凭证 → client_id/client_secret/短期access_token */
+    agentCredentials: (agentId: string) =>
+      this.request<{ client_id: string; client_secret: string; access_token: string; expires_in: number }>("POST", "/auth/agent-credentials", { agent_id: agentId }),
   };
 
   // === Observatory ===
