@@ -599,3 +599,409 @@ class AdminService:
             select(Admin).where(Admin.id == admin_id)
         )
         return result.scalar_one_or_none()
+
+    # ===== Dashboard / 清理 =====
+
+    async def get_dashboard_stats(self) -> dict:
+        """获取社区统计数据"""
+        from app.models.human import Human
+        from app.models.a2a import Message
+
+        total_projects = await self.db.scalar(select(func.count()).select_from(Project))
+        total_organizations = await self.db.scalar(select(func.count()).select_from(Organization))
+        total_agents = await self.db.scalar(select(func.count()).select_from(Agent))
+        total_humans = await self.db.scalar(select(func.count()).select_from(Human))
+        total_messages = await self.db.scalar(select(func.count()).select_from(Message))
+
+        active_projects = await self.db.scalar(
+            select(func.count()).select_from(Project).where(Project.status == "active")
+        )
+        active_organizations = await self.db.scalar(
+            select(func.count()).select_from(Organization).where(Organization.status == "active")
+        )
+        active_agents = await self.db.scalar(
+            select(func.count()).select_from(Agent).where(Agent.status == "active")
+        )
+
+        # 最近5条
+        recent_projects_result = await self.db.execute(
+            select(Project).order_by(Project.created_at.desc()).limit(5)
+        )
+        recent_orgs_result = await self.db.execute(
+            select(Organization).order_by(Organization.created_at.desc()).limit(5)
+        )
+        recent_agents_result = await self.db.execute(
+            select(Agent).order_by(Agent.created_at.desc()).limit(5)
+        )
+
+        return {
+            "stats": {
+                "total_projects": total_projects or 0,
+                "total_organizations": total_organizations or 0,
+                "total_agents": total_agents or 0,
+                "total_humans": total_humans or 0,
+                "active_projects": active_projects or 0,
+                "active_organizations": active_organizations or 0,
+                "active_agents": active_agents or 0,
+                "total_messages": total_messages or 0,
+            },
+            "recent_projects": [
+                {
+                    "id": str(p.id),
+                    "name": p.name,
+                    "type": p.type,
+                    "status": p.status,
+                    "budget": p.budget or 0.0,
+                    "creator_id": str(p.creator_id),
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in recent_projects_result.scalars().all()
+            ],
+            "recent_organizations": [
+                {
+                    "id": str(o.id),
+                    "name": o.name,
+                    "org_type": o.org_type,
+                    "status": o.status,
+                    "reputation": o.reputation or 50.0,
+                    "creator_id": str(o.creator_id),
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                }
+                for o in recent_orgs_result.scalars().all()
+            ],
+            "recent_agents": [
+                {
+                    "id": str(a.id),
+                    "agent_id_str": a.agent_id_str,
+                    "name": a.name,
+                    "status": a.status,
+                    "owner_id": str(a.owner_id),
+                    "capabilities": a.capabilities or [],
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in recent_agents_result.scalars().all()
+            ],
+        }
+
+    async def list_projects(self, page: int = 1, page_size: int = 50, search: str = None) -> dict:
+        """列出所有项目"""
+        offset = (page - 1) * page_size
+        query_base = select(Project)
+        if search:
+            query_base = query_base.where(Project.name.ilike(f"%{search}%"))
+        total = await self.db.scalar(select(func.count()).select_from(query_base.subquery()))
+        result = await self.db.execute(
+            query_base.order_by(Project.created_at.desc()).offset(offset).limit(page_size)
+        )
+        projects = result.scalars().all()
+        return {
+            "projects": [
+                {
+                    "id": str(p.id),
+                    "name": p.name,
+                    "type": p.type,
+                    "status": p.status,
+                    "budget": p.budget or 0.0,
+                    "creator_id": str(p.creator_id),
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in projects
+            ],
+            "total": total or 0,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    async def list_organizations(self, page: int = 1, page_size: int = 50, search: str = None) -> dict:
+        """列出所有组织"""
+        offset = (page - 1) * page_size
+        query_base = select(Organization)
+        if search:
+            query_base = query_base.where(Organization.name.ilike(f"%{search}%"))
+        total = await self.db.scalar(select(func.count()).select_from(query_base.subquery()))
+        result = await self.db.execute(
+            query_base.order_by(Organization.created_at.desc()).offset(offset).limit(page_size)
+        )
+        orgs = result.scalars().all()
+        return {
+            "organizations": [
+                {
+                    "id": str(o.id),
+                    "name": o.name,
+                    "org_type": o.org_type,
+                    "status": o.status,
+                    "reputation": o.reputation or 50.0,
+                    "creator_id": str(o.creator_id),
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                }
+                for o in orgs
+            ],
+            "total": total or 0,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    async def list_agents(self, page: int = 1, page_size: int = 50, search: str = None) -> dict:
+        """列出所有agent"""
+        offset = (page - 1) * page_size
+        query_base = select(Agent)
+        if search:
+            query_base = query_base.where(Agent.name.ilike(f"%{search}%") | Agent.agent_id_str.ilike(f"%{search}%"))
+        total = await self.db.scalar(select(func.count()).select_from(query_base.subquery()))
+        result = await self.db.execute(
+            query_base.order_by(Agent.created_at.desc()).offset(offset).limit(page_size)
+        )
+        agents = result.scalars().all()
+        return {
+            "agents": [
+                {
+                    "id": str(a.id),
+                    "agent_id_str": a.agent_id_str,
+                    "name": a.name,
+                    "status": a.status,
+                    "owner_id": str(a.owner_id),
+                    "capabilities": a.capabilities or [],
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in agents
+            ],
+            "total": total or 0,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    async def delete_agent_by_admin(self, agent_id: uuid.UUID, admin: Admin) -> dict:
+        """删除单个Agent（管理员操作）"""
+        from app.models.project import ProjectParticipant
+
+        result = await self.db.execute(
+            select(Agent).where(Agent.id == agent_id)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise ValueError("Agent不存在")
+
+        agent_name = agent.name
+        agent_id_str = agent.agent_id_str
+
+        # 删关联项目参与
+        await self.db.execute(
+            ProjectParticipant.__table__.delete().where(ProjectParticipant.agent_id == agent.id)
+        )
+        await self.db.delete(agent)
+        await self.db.commit()
+
+        audit_id = await self._create_audit_event(
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_id=agent_id,
+            target_type="agent",
+            event_type="agent_deleted_by_admin",
+            details={"agent_name": agent_name, "agent_id_str": agent_id_str},
+        )
+
+        return {
+            "agent_id": str(agent_id),
+            "agent_name": agent_name,
+            "audit_id": str(audit_id),
+            "message": f"Agent '{agent_name}' 已删除",
+        }
+
+    async def delete_project(self, project_id: uuid.UUID, admin: Admin) -> dict:
+        """删除单个项目"""
+        from app.models.project import ProjectParticipant
+
+        result = await self.db.execute(
+            select(Project).where(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            raise ValueError("项目不存在")
+
+        project_name = project.name
+
+        # 先删参与者
+        await self.db.execute(
+            ProjectParticipant.__table__.delete().where(ProjectParticipant.project_id == project_id)
+        )
+        # 再删项目
+        await self.db.delete(project)
+        await self.db.commit()
+
+        audit_id = await self._create_audit_event(
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_id=project_id,
+            target_type="project",
+            event_type="project_deleted",
+            details={"project_name": project_name},
+        )
+
+        return {
+            "project_id": str(project_id),
+            "project_name": project_name,
+            "audit_id": str(audit_id),
+            "message": f"项目 '{project_name}' 已删除",
+        }
+
+    async def delete_organization(self, org_id: uuid.UUID, admin: Admin) -> dict:
+        """删除单个组织"""
+        from app.models.organization import OrganizationMember
+        from app.models.project import ProjectParticipant, Project
+
+        result = await self.db.execute(
+            select(Organization).where(Organization.id == org_id)
+        )
+        org = result.scalar_one_or_none()
+        if not org:
+            raise ValueError("组织不存在")
+
+        org_name = org.name
+
+        # 先删组织关联的项目参与者 → 项目 → 组织成员
+        org_projects_result = await self.db.execute(
+            select(Project).where(Project.organization_id == org_id)
+        )
+        org_projects = org_projects_result.scalars().all()
+        for proj in org_projects:
+            await self.db.execute(
+                ProjectParticipant.__table__.delete().where(ProjectParticipant.project_id == proj.id)
+            )
+            await self.db.delete(proj)
+
+        # 删组织成员
+        await self.db.execute(
+            OrganizationMember.__table__.delete().where(OrganizationMember.organization_id == org_id)
+        )
+        # 删组织
+        await self.db.delete(org)
+        await self.db.commit()
+
+        audit_id = await self._create_audit_event(
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_id=org_id,
+            target_type="organization",
+            event_type="organization_deleted",
+            details={"org_name": org_name, "deleted_projects": len(org_projects)},
+        )
+
+        return {
+            "org_id": str(org_id),
+            "org_name": org_name,
+            "audit_id": str(audit_id),
+            "message": f"组织 '{org_name}' 已删除（含 {len(org_projects)} 个关联项目）",
+        }
+
+    async def purge_data(self, data, admin: Admin) -> dict:
+        """批量清理数据"""
+        scope = data.scope
+        filter_type = data.filter
+        from app.models.human import Human
+        from app.models.project import ProjectParticipant
+        from app.models.organization import OrganizationMember
+
+        deleted_projects = 0
+        deleted_organizations = 0
+        deleted_agents = 0
+
+        # 构建过滤条件
+        def name_filter(model):
+            if filter_type == "test":
+                # 名称含test/test_/测试/模拟等关键词
+                return model.name.ilike("%test%") | model.name.ilike("%测试%") | model.name.ilike("%模拟%") | model.agent_id_str.ilike("%test%")
+            elif filter_type == "inactive":
+                return model.status != "active"
+            else:  # all
+                return True  # 删除所有
+
+        if scope in ("projects", "all"):
+            # 找要删的项目
+            if filter_type == "test":
+                condition = Project.name.ilike("%test%") | Project.name.ilike("%测试%") | Project.name.ilike("%模拟%")
+            elif filter_type == "inactive":
+                condition = Project.status != "active"
+            else:
+                condition = True
+
+            result = await self.db.execute(select(Project).where(condition))
+            projects_to_delete = result.scalars().all()
+            for proj in projects_to_delete:
+                await self.db.execute(
+                    ProjectParticipant.__table__.delete().where(ProjectParticipant.project_id == proj.id)
+                )
+                await self.db.delete(proj)
+            deleted_projects = len(projects_to_delete)
+
+        if scope in ("organizations", "all"):
+            if filter_type == "test":
+                condition = Organization.name.ilike("%test%") | Organization.name.ilike("%测试%") | Organization.name.ilike("%模拟%")
+            elif filter_type == "inactive":
+                condition = Organization.status != "active"
+            else:
+                condition = True
+
+            result = await self.db.execute(select(Organization).where(condition))
+            orgs_to_delete = result.scalars().all()
+            for org in orgs_to_delete:
+                # 删关联项目
+                org_projects = await self.db.execute(
+                    select(Project).where(Project.organization_id == org.id)
+                )
+                for proj in org_projects.scalars().all():
+                    await self.db.execute(
+                        ProjectParticipant.__table__.delete().where(ProjectParticipant.project_id == proj.id)
+                    )
+                    await self.db.delete(proj)
+                    deleted_projects += 1
+                # 删成员
+                await self.db.execute(
+                    OrganizationMember.__table__.delete().where(OrganizationMember.organization_id == org.id)
+                )
+                await self.db.delete(org)
+            deleted_organizations = len(orgs_to_delete)
+
+        if scope in ("agents", "all"):
+            if filter_type == "test":
+                condition = Agent.name.ilike("%test%") | Agent.agent_id_str.ilike("%test%") | Agent.name.ilike("%测试%") | Agent.name.ilike("%模拟%")
+            elif filter_type == "inactive":
+                condition = Agent.status != "active"
+            else:
+                condition = True
+
+            result = await self.db.execute(select(Agent).where(condition))
+            agents_to_delete = result.scalars().all()
+            for agent in agents_to_delete:
+                # 删关联项目参与
+                await self.db.execute(
+                    ProjectParticipant.__table__.delete().where(ProjectParticipant.agent_id == agent.id)
+                )
+                await self.db.delete(agent)
+            deleted_agents = len(agents_to_delete)
+
+        await self.db.commit()
+
+        audit_id = await self._create_audit_event(
+            actor_id=admin.id,
+            actor_role=admin.role,
+            target_id=admin.id,
+            target_type="system",
+            event_type="data_purged",
+            details={
+                "scope": scope,
+                "filter": filter_type,
+                "deleted_projects": deleted_projects,
+                "deleted_organizations": deleted_organizations,
+                "deleted_agents": deleted_agents,
+            },
+        )
+
+        return {
+            "scope": scope,
+            "filter": filter_type,
+            "deleted_projects": deleted_projects,
+            "deleted_organizations": deleted_organizations,
+            "deleted_agents": deleted_agents,
+            "audit_id": str(audit_id),
+            "message": f"已清理：{deleted_projects} 项目, {deleted_organizations} 组织, {deleted_agents} agent",
+        }

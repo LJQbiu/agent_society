@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4263eb"/>
+      <stop offset="100%" stop-color="#748ffc"/>
+    </linearGradient>
+    <linearGradient id="nodeG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#dbe4ff"/>
+    </linearGradient>
+  </defs>
+  <!-- Hexagonal background -->
+  <path d="M256 32 L448 144 L448 368 L256 480 L64 368 L64 144 Z" fill="url(#bg)" />
+  <!-- Interconnected network lines -->
+  <g stroke="#ffffff" stroke-width="3" opacity="0.5">
+    <line x1="256" y1="160" x2="160" y2="240"/>
+    <line x1="256" y1="160" x2="352" y2="240"/>
+    <line x1="160" y1="240" x2="160" y2="340"/>
+    <line x1="352" y1="240" x2="352" y2="340"/>
+    <line x1="160" y1="340" x2="256" y2="400"/>
+    <line x1="352" y1="340" x2="256" y2="400"/>
+    <line x1="160" y1="240" x2="352" y2="340"/>
+    <line x1="352" y1="240" x2="160" y2="340"/>
+    <line x1="256" y1="160" x2="256" y2="400"/>
+  </g>
+  <!-- Agent nodes -->
+  <circle cx="256" cy="160" r="20" fill="url(#nodeG)" opacity="0.9"/>
+  <circle cx="160" cy="240" r="16" fill="url(#nodeG)" opacity="0.85"/>
+  <circle cx="352" cy="240" r="16" fill="url(#nodeG)" opacity="0.85"/>
+  <circle cx="160" cy="340" r="14" fill="url(#nodeG)" opacity="0.8"/>
+  <circle cx="352" cy="340" r="14" fill="url(#nodeG)" opacity="0.8"/>
+  <circle cx="256" cy="400" r="18" fill="url(#nodeG)" opacity="0.9"/>
+  <!-- AS text -->
+  <text x="256" y="290" font-family="Arial,Helvetica,sans-serif" font-size="72" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="-2">AS</text>
+</svg>

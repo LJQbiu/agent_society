@@ -12,6 +12,7 @@ import type {
   MyAgentsResponse,
   OrganizationCreateRequest, OrganizationUpdateRequest, OrganizationCRUDResponse, OrganizationCRUDListResponse, MemberListResponse,
   ProjectCreateRequest, ProjectUpdateRequest, ProjectCRUDResponse, ProjectCRUDListResponse, ParticipantListResponse, StatusTransitionRequest,
+  DashboardResponse, AdminListResponse, AdminDeleteResponse, PurgeResponse, DeleteAgentResponse, AuditLogResponse,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -28,10 +29,12 @@ function cleanParams(params: Record<string, any>): string {
 }
 
 class ApiClient {
-  /** 构造请求headers — httpOnly Cookie模式下无需手动添加Authorization */
+  /** 构造请求headers — httpOnly Cookie + Admin Bearer Token */
   private getHeaders(hasBody: boolean = false): Record<string, string> {
     const headers: Record<string, string> = {};
-    // Token由httpOnly Cookie自动携带，不再从localStorage读取
+    // Admin token: stored in localStorage after /admin/login
+    const adminToken = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+    if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
     if (hasBody) headers["Content-Type"] = "application/json";
     return headers;
   }
@@ -117,6 +120,8 @@ class ApiClient {
     getProfile: () => this.request<HumanProfile>("GET", "/identity/me"),
     updateProfile: (data: any) => this.request("PUT", "/identity/me", data),
     myAgents: () => this.request<MyAgentsResponse>("GET", "/identity/my-agents"),
+    deleteMyAgent: (agentId: string) =>
+      this.request<DeleteAgentResponse>("DELETE", `/identity/my-agents/${agentId}`),
   };
 
   // === Auth ===
@@ -139,6 +144,12 @@ class ApiClient {
     /** 获取Agent的接入凭证 → client_id/client_secret/短期access_token */
     agentCredentials: (agentId: string) =>
       this.request<{ client_id: string; client_secret: string; access_token: string; expires_in: number }>("POST", "/auth/agent-credentials", { agent_id: agentId }),
+    /** 忘记密码 - 生成重置token */
+    forgotPassword: (data: { username?: string; email?: string }) =>
+      this.request<{ message: string; reset_token: string }>("POST", "/auth/forgot-password", data),
+    /** 重置密码 - 使用token+新密码 */
+    resetPassword: (data: { reset_token: string; new_password: string }) =>
+      this.request<{ message: string; username: string }>("POST", "/auth/reset-password", data),
   };
 
   // === Observatory ===
@@ -244,8 +255,14 @@ class ApiClient {
   admin = {
     init: (data: { username: string; password: string; email: string }) =>
       this.request("POST", "/admin/init", data),
-    login: (data: { username: string; password: string }) =>
-      this.request("POST", "/admin/login", data),
+    login: async (data: { username: string; password: string }) => {
+      const res = await this.request<{ access_token: string; token_type: string; admin_id: string; role: string }>("POST", "/admin/login", data);
+      localStorage.setItem("admin_token", res.access_token);
+      return res;
+    },
+    logout: () => {
+      localStorage.removeItem("admin_token");
+    },
     freezeAgent: (agentId: string, data: { reason: string }) =>
       this.request("POST", `/admin/agents/${agentId}/freeze`, data),
     unfreezeAgent: (agentId: string, data: { reason: string }) =>
@@ -267,7 +284,23 @@ class ApiClient {
     brake: (data: { scope?: string; reason: string }) =>
       this.request("POST", "/admin/brake", data),
     getAuditLog: (params: { event_type?: string; target_type?: string; start_time?: string; end_time?: string } = {}) =>
-      this.request("GET", `/admin/audit?${cleanParams(params)}`),
+      this.request<AuditLogResponse>("GET", `/admin/audit?${cleanParams(params)}`),
+    dashboard: () =>
+      this.request<DashboardResponse>("GET", "/admin/dashboard"),
+    listProjects: (params: { search?: string; page?: number; page_size?: number } = {}) =>
+      this.request<AdminListResponse>("GET", `/admin/projects?${cleanParams(params)}`),
+    listOrganizations: (params: { search?: string; page?: number; page_size?: number } = {}) =>
+      this.request<AdminListResponse>("GET", `/admin/organizations?${cleanParams(params)}`),
+    listAgents: (params: { search?: string; page?: number; page_size?: number } = {}) =>
+      this.request<AdminListResponse>("GET", `/admin/agents?${cleanParams(params)}`),
+    deleteProject: (projectId: string) =>
+      this.request<AdminDeleteResponse>("DELETE", `/admin/projects/${projectId}`),
+    deleteOrganization: (orgId: string) =>
+      this.request<AdminDeleteResponse>("DELETE", `/admin/organizations/${orgId}`),
+    deleteAgent: (agentId: string) =>
+      this.request<AdminDeleteResponse>("DELETE", `/admin/agents/${agentId}`),
+    purge: (data: { scope?: string; filter?: string; confirm?: boolean }) =>
+      this.request<PurgeResponse>("POST", "/admin/purge", data),
   };
 
   // === MCP ===

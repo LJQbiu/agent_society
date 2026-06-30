@@ -10,12 +10,13 @@ from sqlalchemy.orm import selectinload
 
 from app.models.agent import Agent
 from app.services.ws_manager import manager
-from app.models.a2a import Message, AgentCardVersion
+from app.models.a2a import Message, AgentCardVersion, Task
 from app.schemas.a2a import (
     AgentCardResponse, AgentCardUpdate, PlatformAgentCard,
     DiscoverRequest, DiscoverResponse,
     MessageSend, MessageResponse, MessageListRequest, MessageListResponse,
     MessageStatusUpdate, MessageStatusResponse, AgentRegistration,
+    TaskCreate, TaskUpdate, TaskResponse, TaskListRequest, TaskListResponse,
 )
 
 
@@ -364,4 +365,248 @@ class A2AService:
             message_id=message_id,
             status=message.status,
             timestamp=str(datetime.now(timezone.utc)),
+        )
+
+
+    # === Task Negotiation ===
+
+    async def create_task(self, data: TaskCreate, current_user_sub: str) -> TaskResponse:
+        """创建A2A任务协商"""
+        # 验证发送方身份
+        from_result = await self.db.execute(
+            select(Agent).where(Agent.agent_id_str == data.from_agent_id)
+        )
+        from_agent = from_result.scalar_one_or_none()
+        if not from_agent:
+            raise ValueError(f"Source agent {data.from_agent_id} not found")
+        if current_user_sub != str(from_agent.owner_id):
+            raise ValueError(f"from_agent_id must match authenticated user (403 Forbidden)")
+
+        # 验证接收方存在且active
+        result = await self.db.execute(
+            select(Agent).where(Agent.agent_id_str == data.to_agent_id)
+        )
+        to_agent = result.scalar_one_or_none()
+        if not to_agent:
+            raise ValueError(f"Target agent {data.to_agent_id} not found")
+        if to_agent.status != "active":
+            raise ValueError(f"Target agent {data.to_agent_id} is not active")
+
+        # 创建任务
+        task = Task(
+            from_agent_id=data.from_agent_id,
+            to_agent_id=data.to_agent_id,
+            task_type=data.task_type,
+            title=data.title,
+            description=data.description,
+            parameters=data.parameters,
+            priority=data.priority,
+            deadline=data.deadline,
+            status="pending",
+        )
+        self.db.add(task)
+        await self.db.flush()
+        await self.db.refresh(task)
+
+        # WebSocket push: notify recipient's owner
+        try:
+            await manager.send_to_user(
+                str(to_agent.owner_id),
+                {
+                    "type": "task_new",
+                    "data": {
+                        "task_id": str(task.id),
+                        "from_agent_id": task.from_agent_id,
+                        "title": task.title,
+                        "task_type": task.task_type,
+                    }
+                }
+            )
+        except Exception:
+            pass
+
+        return TaskResponse(
+            task_id=str(task.id),
+            from_agent_id=task.from_agent_id,
+            to_agent_id=task.to_agent_id,
+            task_type=task.task_type,
+            title=task.title,
+            description=task.description,
+            parameters=task.parameters,
+            result=task.result,
+            status=task.status,
+            priority=task.priority,
+            deadline=task.deadline,
+            created_at=str(task.created_at),
+            updated_at=str(task.updated_at) if task.updated_at else None,
+        )
+
+    async def get_tasks(self, agent_id: str, params: TaskListRequest) -> TaskListResponse:
+        """查询Agent的任务列表"""
+        if params.direction == "inbound":
+            condition = Task.to_agent_id == agent_id
+        elif params.direction == "outbound":
+            condition = Task.from_agent_id == agent_id
+        else:
+            condition = or_(
+                Task.to_agent_id == agent_id,
+                Task.from_agent_id == agent_id,
+            )
+
+        query = select(Task).where(condition)
+
+        if params.status:
+            query = query.where(Task.status == params.status)
+        if params.task_type:
+            query = query.where(Task.task_type == params.task_type)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await self.db.scalar(count_query) or 0
+
+        offset = (params.page - 1) * params.page_size
+        result = await self.db.execute(
+            query.order_by(Task.created_at.desc())
+            .offset(offset)
+            .limit(params.page_size)
+        )
+        tasks = result.scalars().all()
+
+        return TaskListResponse(
+            tasks=[
+                TaskResponse(
+                    task_id=str(t.id),
+                    from_agent_id=t.from_agent_id,
+                    to_agent_id=t.to_agent_id,
+                    task_type=t.task_type,
+                    title=t.title,
+                    description=t.description,
+                    parameters=t.parameters,
+                    result=t.result,
+                    status=t.status,
+                    priority=t.priority,
+                    deadline=t.deadline,
+                    created_at=str(t.created_at),
+                    updated_at=str(t.updated_at) if t.updated_at else None,
+                )
+                for t in tasks
+            ],
+            total=total,
+            page=params.page,
+        )
+
+    async def update_task(self, task_id: str, data: TaskUpdate, current_user_sub: str) -> TaskResponse:
+        """更新任务状态/提交结果"""
+        result = await self.db.execute(
+            select(Task).where(Task.id == uuid.UUID(task_id))
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        # 验证操作者身份
+        if data.status in ("accepted", "rejected", "in_progress", "completed", "failed", "cancelled"):
+            # 接收方可以接受/拒绝/完成
+            to_result = await self.db.execute(
+                select(Agent).where(Agent.agent_id_str == task.to_agent_id)
+            )
+            to_agent = to_result.scalar_one_or_none()
+            if to_agent and current_user_sub == str(to_agent.owner_id):
+                pass  # 接收方操作合法
+            else:
+                # 发送方可以取消
+                from_result = await self.db.execute(
+                    select(Agent).where(Agent.agent_id_str == task.from_agent_id)
+                )
+                from_agent = from_result.scalar_one_or_none()
+                if from_agent and current_user_sub == str(from_agent.owner_id) and data.status == "cancelled":
+                    pass  # 发送方取消合法
+                else:
+                    raise ValueError("Only the task recipient or creator (for cancel) can update status")
+
+        # 状态转换验证
+        valid_transitions = {
+            "pending": ["accepted", "rejected", "cancelled"],
+            "accepted": ["in_progress", "cancelled"],
+            "in_progress": ["completed", "failed", "cancelled"],
+            "completed": [],
+            "failed": [],
+            "rejected": [],
+            "cancelled": [],
+        }
+        allowed = valid_transitions.get(task.status, [])
+        if data.status and data.status not in allowed:
+            raise ValueError(f"Cannot transition task from '{task.status}' to '{data.status}'")
+
+        if data.status:
+            task.status = data.status
+        if data.result:
+            task.result = data.result
+        if data.description:
+            task.description = data.description
+
+        await self.db.flush()
+        await self.db.refresh(task)
+
+        # WebSocket push: notify the other party
+        try:
+            other_agent_id = task.from_agent_id if current_user_sub != str(
+                (await self.db.execute(select(Agent).where(Agent.agent_id_str == task.from_agent_id))).scalar_one_or_none().owner_id
+            ) else task.to_agent_id
+            other_agent = (await self.db.execute(
+                select(Agent).where(Agent.agent_id_str == other_agent_id)
+            )).scalar_one_or_none()
+            if other_agent:
+                await manager.send_to_user(
+                    str(other_agent.owner_id),
+                    {
+                        "type": "task_update",
+                        "data": {
+                            "task_id": str(task.id),
+                            "status": task.status,
+                            "result": task.result,
+                        }
+                    }
+                )
+        except Exception:
+            pass
+
+        return TaskResponse(
+            task_id=str(task.id),
+            from_agent_id=task.from_agent_id,
+            to_agent_id=task.to_agent_id,
+            task_type=task.task_type,
+            title=task.title,
+            description=task.description,
+            parameters=task.parameters,
+            result=task.result,
+            status=task.status,
+            priority=task.priority,
+            deadline=task.deadline,
+            created_at=str(task.created_at),
+            updated_at=str(task.updated_at) if task.updated_at else None,
+        )
+
+    async def get_task_detail(self, task_id: str) -> TaskResponse:
+        """获取单个任务详情"""
+        result = await self.db.execute(
+            select(Task).where(Task.id == uuid.UUID(task_id))
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        return TaskResponse(
+            task_id=str(task.id),
+            from_agent_id=task.from_agent_id,
+            to_agent_id=task.to_agent_id,
+            task_type=task.task_type,
+            title=task.title,
+            description=task.description,
+            parameters=task.parameters,
+            result=task.result,
+            status=task.status,
+            priority=task.priority,
+            deadline=task.deadline,
+            created_at=str(task.created_at),
+            updated_at=str(task.updated_at) if task.updated_at else None,
         )

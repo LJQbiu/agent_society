@@ -22,7 +22,7 @@ interface AgentCredential {
 
 export function IdentityManager() {
   const { user, isLoading } = useAuth();
-  const toast = useToast();
+  const { showToast } = useToast();
 
   // Profile state
   const [profile, setProfile] = useState<any>(null);
@@ -71,15 +71,15 @@ export function IdentityManager() {
       const updated = await api.identity.updateProfile(editForm);
       setProfile(updated);
       setEditMode(false);
-      toast.success("资料已更新");
+      showToast("资料已更新", "success");
     } catch (e: any) {
-      toast.error(e.message || "更新失败");
+      showToast(e.message || "更新失败", "error");
     }
     setSaving(false);
   };
 
   const registerAgent = async () => {
-    if (!agentName.trim()) { toast.error("请输入Agent名称"); return; }
+    if (!agentName.trim()) { showToast("请输入Agent名称", "error"); return; }
     setRegistering(true);
     try {
       // Step 1: Register the agent
@@ -101,12 +101,12 @@ export function IdentityManager() {
           });
           setSelectedAgent(agentId);
           setSecretVisible(false);
-          toast.success("Agent注册成功！凭证已自动生成");
+          showToast("Agent注册成功！凭证已自动生成", "success");
         } catch {
-          toast.success("Agent注册成功！请点击「获取凭证」获取接入信息");
+          showToast("Agent注册成功！请点击「获取凭证」获取接入信息", "success");
         }
       } else {
-        toast.success("Agent注册成功！");
+        showToast("Agent注册成功！", "success");
       }
 
       // Refresh agent list
@@ -116,7 +116,7 @@ export function IdentityManager() {
       setAgentCap("");
       setAgentDesc("");
     } catch (e: any) {
-      toast.error(e.message || "注册失败");
+      showToast(e.message || "注册失败", "error");
     }
     setRegistering(false);
   };
@@ -144,12 +144,12 @@ export function IdentityManager() {
             status: "bound",
           });
         } catch (e2: any) {
-          toast.error(e2.message || "获取凭证失败");
+          showToast(e2.message || "获取凭证失败", "error");
         }
       }
       setSecretVisible(false);
     } catch (e: any) {
-      toast.error(e.message || "获取凭证失败");
+      showToast(e.message || "获取凭证失败", "error");
     }
     setLoadingCred(false);
   };
@@ -158,10 +158,28 @@ export function IdentityManager() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedField(field);
-      toast.success(`${field} 已复制到剪贴板`);
+      showToast(`${field} 已复制到剪贴板`, "success");
       setTimeout(() => setCopiedField(null), 2000);
     } catch {
-      toast.error("复制失败，请手动复制");
+      showToast("复制失败，请手动复制", "error");
+    }
+  };
+
+  const deleteAgent = async (agentId: string, agentName: string) => {
+    if (!confirm(`确定要删除Agent「${agentName}」吗？此操作不可撤销。`)) return;
+    try {
+      await api.identity.deleteMyAgent(agentId);
+      showToast(`Agent「${agentName}」已删除`, "success");
+      // Refresh agent list
+      const agentsRes: any = await api.identity.myAgents();
+      setMyAgents(agentsRes.agents || []);
+      // Clear credential if deleted agent was selected
+      if (selectedAgent === agentId) {
+        setCredential(null);
+        setSelectedAgent(null);
+      }
+    } catch (e: any) {
+      showToast(e.message || "删除失败", "error");
     }
   };
 
@@ -308,13 +326,22 @@ export function IdentityManager() {
                       </div>
                       <div className="text-xs text-gray-400">ID: {a.id}</div>
                     </div>
-                    <button
-                      className="btn btn-outline text-sm"
-                      onClick={() => fetchCredential(a.id)}
-                      disabled={loadingCred && selectedAgent === a.id}
-                    >
-                      {loadingCred && selectedAgent === a.id ? "获取中..." : "🔑 获取凭证"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="btn btn-outline text-sm"
+                        onClick={() => fetchCredential(a.id)}
+                        disabled={loadingCred && selectedAgent === a.id}
+                      >
+                        {loadingCred && selectedAgent === a.id ? "获取中..." : "🔑 获取凭证"}
+                      </button>
+                      <button
+                        className="text-red-400 hover:text-red-600 text-sm transition-colors"
+                        onClick={() => deleteAgent(a.id, a.name)}
+                        title="删除此Agent"
+                      >
+                        🗑️ 删除
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -330,13 +357,22 @@ export function IdentityManager() {
                         {a.capabilities?.join(", ") || a.capability || "无能力描述"} · 状态: {a.status}
                       </div>
                     </div>
-                    <button
-                      className="btn btn-outline text-sm opacity-50"
-                      onClick={() => fetchCredential(a.id)}
-                      disabled={loadingCred && selectedAgent === a.id}
-                    >
-                      {loadingCred && selectedAgent === a.id ? "获取中..." : "🔑 获取凭证"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="btn btn-outline text-sm opacity-50"
+                        onClick={() => fetchCredential(a.id)}
+                        disabled={loadingCred && selectedAgent === a.id}
+                      >
+                        {loadingCred && selectedAgent === a.id ? "获取中..." : "🔑 获取凭证"}
+                      </button>
+                      <button
+                        className="text-red-400 hover:text-red-600 text-sm transition-colors"
+                        onClick={() => deleteAgent(a.id, a.name)}
+                        title="删除此Agent"
+                      >
+                        🗑️ 删除
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

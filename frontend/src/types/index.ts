@@ -312,6 +312,8 @@ export interface BalanceResponse {
   holder_type: string;
   balance: number;
   frozen: boolean;
+  reputation?: number;
+  trust_level?: string;
 }
 
 export interface TransactionResponse {
@@ -465,6 +467,74 @@ export interface StatusTransitionRequest {
 // === Pagination (generic) ===
 export interface PaginatedResponse<T> {
   items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// === Admin Dashboard ===
+export interface DashboardStats {
+  total_agents: number;
+  active_agents: number;
+  total_projects: number;
+  active_projects: number;
+  total_organizations: number;
+  active_organizations: number;
+  total_humans: number;
+  total_messages: number;
+}
+
+export interface DashboardResponse {
+  stats: DashboardStats;
+}
+
+export interface AdminListItem {
+  id: string;
+  name: string;
+  status?: string;
+  owner_name?: string;
+  created_at?: string;
+}
+
+export interface AdminListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  [key: string]: any;
+}
+
+export type AdminDeleteResponse = DeleteAgentResponse;
+
+export interface PurgeResponse {
+  scope: string;
+  filter: string;
+  deleted_projects: number;
+  deleted_organizations: number;
+  deleted_agents: number;
+  audit_id: string;
+  message: string;
+}
+
+export interface DeleteAgentResponse {
+  agent_id: string;
+  agent_name: string;
+  audit_id: string;
+  message: string;
+}
+
+export interface AuditLogEvent {
+  event_id: string;
+  event_type: string;
+  actor_id: string;
+  actor_role: string;
+  target_id: string;
+  target_type: string;
+  details: Record<string, any>;
+  created_at: string;
+}
+
+export interface AuditLogResponse {
+  events: AuditLogEvent[];
   total: number;
   page: number;
   page_size: number;

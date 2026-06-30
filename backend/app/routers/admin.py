@@ -18,6 +18,11 @@ from app.schemas.admin import (
     UnfreezeAccountRequest, UnfreezeAccountResponse,
     BrakeRequest, BrakeResponse,
     AuditLogResponse,
+    # Dashboard / 清理
+    PurgeRequest, PurgeResponse,
+    DeleteProjectResponse, DeleteOrganizationResponse, DeleteAgentResponse,
+    AdminDashboardResponse, AdminDashboardStats,
+    ListProjectsResponse, ListOrganizationsResponse, ListAgentsResponse,
 )
 from app.services.admin import AdminService
 from app.models.governance import Admin
@@ -207,3 +212,102 @@ async def get_audit_log(
     return await AdminService(db).get_audit_log(
         event_type, target_type, start_time, end_time, page, page_size
     )
+
+# ===== Dashboard =====
+
+@router.get("/dashboard", response_model=AdminDashboardResponse)
+async def get_dashboard(
+    admin: Admin = Depends(require_admin_or_super),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取Admin Dashboard统计数据"""
+    return await AdminService(db).get_dashboard_stats()
+
+# ===== 列表查询 =====
+
+@router.get("/projects", response_model=ListProjectsResponse)
+async def list_projects(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    admin: Admin = Depends(require_admin_or_super),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出所有项目"""
+    return await AdminService(db).list_projects(page, page_size, search)
+
+@router.get("/organizations", response_model=ListOrganizationsResponse)
+async def list_organizations(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    admin: Admin = Depends(require_admin_or_super),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出所有组织"""
+    return await AdminService(db).list_organizations(page, page_size, search)
+
+@router.get("/agents", response_model=ListAgentsResponse)
+async def list_agents(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    admin: Admin = Depends(require_admin_or_super),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出所有Agent"""
+    return await AdminService(db).list_agents(page, page_size, search)
+
+# ===== 单个删除 =====
+
+@router.delete("/projects/{project_id}", response_model=DeleteProjectResponse)
+async def delete_project(
+    project_id: UUID,
+    admin: Admin = Depends(require_super_admin_model),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除单个项目（仅super_admin）"""
+    try:
+        return await AdminService(db).delete_project(project_id, admin)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+@router.delete("/organizations/{org_id}", response_model=DeleteOrganizationResponse)
+async def delete_organization(
+    org_id: UUID,
+    admin: Admin = Depends(require_super_admin_model),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除单个组织（仅super_admin）"""
+    try:
+        return await AdminService(db).delete_organization(org_id, admin)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+@router.delete("/agents/{agent_id}", response_model=DeleteAgentResponse)
+async def delete_agent(
+    agent_id: UUID,
+    admin: Admin = Depends(require_super_admin_model),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除单个Agent（仅super_admin）"""
+    try:
+        return await AdminService(db).delete_agent_by_admin(agent_id, admin)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+# ===== 批量清理 =====
+
+@router.post("/purge", response_model=PurgeResponse)
+async def purge_data(
+    data: PurgeRequest,
+    admin: Admin = Depends(require_super_admin_model),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量清理测试/不活跃数据（仅super_admin，需confirm=true）"""
+    if not data.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="必须设置 confirm=true 才能执行批量清理",
+        )
+    return await AdminService(db).purge_data(data, admin)

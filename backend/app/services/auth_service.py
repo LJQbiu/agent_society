@@ -20,6 +20,8 @@ from app.schemas.auth import (
     AuthorizeRequest, AuthorizeResponse,
     TokenRequest, BindAgentRequest, BindAgentResponse,
     AgentCredentialsRequest, AgentCredentialsResponse,
+    ForgotPasswordRequest, ForgotPasswordResponse,
+    ResetPasswordRequest, ResetPasswordResponse,
 )
 
 
@@ -304,6 +306,13 @@ class AuthService:
         if not agent:
             raise ValueError(f"Agent '{data.agent_id}' not found")
 
+        # 检查OAuthClient是否已存在（避免IntegrityError）
+        existing = await self.db.execute(
+            select(OAuthClient).where(OAuthClient.owner_id == agent.id)
+        )
+        if existing.scalar_one_or_none():
+            raise ValueError(f"Agent '{data.agent_id}' already bound to a Human account")
+
         # 创建OAuthClient
         client_id = f"agent-{str(agent.id)}"
         client_secret = secrets.token_urlsafe(32)
@@ -334,7 +343,7 @@ class AuthService:
     async def get_agent_credentials(self, data: AgentCredentialsRequest) -> AgentCredentialsResponse:
         """Agent通过client_credentials获取短期access_token"""
         result = await self.db.execute(
-            select(OAuthClient).where(OAuthClient.agent_id == uuid.UUID(data.agent_id))
+            select(OAuthClient).where(OAuthClient.owner_id == uuid.UUID(data.agent_id))
         )
         client = result.scalar_one_or_none()
         if not client:
@@ -355,4 +364,63 @@ class AuthService:
             client_secret=client_secret,
             access_token=access_token,
             expires_in=expires_in,
+        )
+
+    # === 密码重置 ===
+    async def forgot_password(self, data: ForgotPasswordRequest) -> ForgotPasswordResponse:
+        """生成密码重置token（无MTA，直接返回token供前端使用）"""
+        if not data.username and not data.email:
+            raise ValueError("请提供用户名或邮箱")
+
+        # 查找用户
+        human = None
+        if data.username:
+            result = await self.db.execute(select(Human).where(Human.username == data.username))
+            human = result.scalar_one_or_none()
+        if not human and data.email:
+            result = await self.db.execute(select(Human).where(Human.email == data.email))
+            human = result.scalar_one_or_none()
+
+        if not human:
+            raise ValueError("找不到该用户")
+
+        if not human.is_active:
+            raise ValueError("该账号已被禁用")
+
+        # 生成重置token，1小时有效期
+        reset_token = secrets.token_urlsafe(32)
+        human.reset_token = reset_token
+        human.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        await self.db.flush()
+
+        return ForgotPasswordResponse(
+            message="密码重置token已生成，请在1小时内使用",
+            reset_token=reset_token,
+        )
+
+    async def reset_password(self, data: ResetPasswordRequest) -> ResetPasswordResponse:
+        """使用重置token更新密码"""
+        result = await self.db.execute(select(Human).where(Human.reset_token == data.reset_token))
+        human = result.scalar_one_or_none()
+
+        if not human:
+            raise ValueError("无效的重置token")
+
+        if human.reset_token_expires < datetime.now(timezone.utc):
+            # 清除过期token
+            human.reset_token = None
+            human.reset_token_expires = None
+            await self.db.flush()
+            raise ValueError("重置token已过期，请重新申请")
+
+        # 更新密码
+        human.password_hash = _hash_password(data.new_password)
+        # 清除重置token
+        human.reset_token = None
+        human.reset_token_expires = None
+        await self.db.flush()
+
+        return ResetPasswordResponse(
+            message="密码已成功重置",
+            username=human.username,
         )

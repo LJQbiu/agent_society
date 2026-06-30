@@ -9,6 +9,14 @@ from app.models.organization import Organization, OrganizationMember
 from app.utils.jwt import create_token
 
 
+def _safe_uuid(val: str) -> uuid.UUID:
+    """安全解析UUID字符串，非法格式时抛出清晰的ValueError"""
+    try:
+        return uuid.UUID(val)
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError(f"无效的UUID格式: '{val}'")
+
+
 class IdentityService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -64,7 +72,7 @@ class IdentityService:
         """Agent注册 - 需认证(owner_id from token)"""
         # Check owner exists
         owner_result = await self.db.execute(
-            select(Human).where(Human.id == uuid.UUID(owner_id))
+            select(Human).where(Human.id == _safe_uuid(owner_id))
         )
         owner = owner_result.scalar_one_or_none()
         if not owner:
@@ -77,7 +85,7 @@ class IdentityService:
         agent = Agent(
             name=data.name,
             agent_id_str=agent_id_str,
-            owner_id=uuid.UUID(owner_id),
+            owner_id=_safe_uuid(owner_id),
             capabilities=data.capabilities if hasattr(data, 'capabilities') and data.capabilities else [],
             description=data.description if hasattr(data, 'description') else "",
             status="active",
@@ -107,7 +115,7 @@ class IdentityService:
             description=data.description if hasattr(data, 'description') else "",
             status="active",
             balance=0.0,
-            creator_id=uuid.UUID(creator_id),
+            creator_id=_safe_uuid(creator_id),
         )
         self.db.add(org)
         await self.db.flush()
@@ -115,7 +123,7 @@ class IdentityService:
         # Add creator as leader member
         member = OrganizationMember(
             organization_id=org.id,
-            human_id=uuid.UUID(creator_id),
+            human_id=_safe_uuid(creator_id),
             role="leader",
             status="active",
         )
@@ -134,7 +142,7 @@ class IdentityService:
         """获取profile"""
         if user_type == "human":
             result = await self.db.execute(
-                select(Human).where(Human.id == uuid.UUID(user_id))
+                select(Human).where(Human.id == _safe_uuid(user_id))
             )
             entity = result.scalar_one_or_none()
             if not entity:
@@ -148,7 +156,7 @@ class IdentityService:
             }
         elif user_type == "agent":
             result = await self.db.execute(
-                select(Agent).where(Agent.id == uuid.UUID(user_id))
+                select(Agent).where(Agent.id == _safe_uuid(user_id))
             )
             entity = result.scalar_one_or_none()
             if not entity:
@@ -163,7 +171,7 @@ class IdentityService:
         elif user_type == "admin":
             from app.models.governance import Admin
             result = await self.db.execute(
-                select(Admin).where(Admin.id == uuid.UUID(user_id))
+                select(Admin).where(Admin.id == _safe_uuid(user_id))
             )
             entity = result.scalar_one_or_none()
             if not entity:
@@ -181,7 +189,7 @@ class IdentityService:
     async def my_agents(self, owner_id: str) -> dict:
         """获取当前用户的agent列表"""
         result = await self.db.execute(
-            select(Agent).where(Agent.owner_id == uuid.UUID(owner_id))
+            select(Agent).where(Agent.owner_id == _safe_uuid(owner_id))
         )
         agents = result.scalars().all()
         return {
@@ -203,7 +211,7 @@ class IdentityService:
         """更新profile"""
         if user_type == "human":
             result = await self.db.execute(
-                select(Human).where(Human.id == uuid.UUID(user_id))
+                select(Human).where(Human.id == _safe_uuid(user_id))
             )
             entity = result.scalar_one_or_none()
             if not entity:
@@ -223,7 +231,7 @@ class IdentityService:
             }
         elif user_type == "agent":
             result = await self.db.execute(
-                select(Agent).where(Agent.id == uuid.UUID(user_id))
+                select(Agent).where(Agent.id == _safe_uuid(user_id))
             )
             entity = result.scalar_one_or_none()
             if not entity:
@@ -243,3 +251,54 @@ class IdentityService:
             }
         else:
             raise ValueError(f"不支持的user_type: {user_type}")
+
+    async def delete_agent(self, owner_id: str, agent_id: str) -> dict:
+        """用户删除自己的agent - 先清理所有关联记录"""
+        from sqlalchemy import delete as sa_delete
+        from app.models.governance import OAuthClient
+        from app.models.organization import OrganizationMember
+        from app.models.project import Project, ProjectParticipant
+
+        # 查找agent，验证所有权
+        result = await self.db.execute(
+            select(Agent).where(Agent.id == _safe_uuid(agent_id))
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise ValueError("Agent不存在")
+        if str(agent.owner_id) != str(_safe_uuid(owner_id)):
+            raise ValueError("只能删除自己的agent")
+
+        agent_name = agent.name
+        agent_id_str = agent.agent_id_str
+        agent_uuid = _safe_uuid(agent_id)
+
+        # 1. 删除OAuthClients（agent作为owner）
+        await self.db.execute(
+            sa_delete(OAuthClient).where(OAuthClient.owner_id == agent_uuid)
+        )
+        # 2. 删除OrganizationMembers（agent作为成员）
+        await self.db.execute(
+            sa_delete(OrganizationMember).where(OrganizationMember.agent_id == agent_uuid)
+        )
+        # 3. 删除ProjectParticipants（agent作为参与者）
+        await self.db.execute(
+            sa_delete(ProjectParticipant).where(ProjectParticipant.agent_id == agent_uuid)
+        )
+        # 4. 删除Projects（agent作为创建者）
+        await self.db.execute(
+            sa_delete(Project).where(Project.creator_id == agent_uuid)
+        )
+
+        # 删除agent本身
+        await self.db.execute(
+            sa_delete(Agent).where(Agent.id == agent_uuid)
+        )
+        await self.db.commit()
+
+        return {
+            "agent_id": str(agent_id),
+            "agent_name": agent_name,
+            "agent_id_str": agent_id_str,
+            "message": "Agent已删除",
+        }

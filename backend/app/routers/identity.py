@@ -81,3 +81,19 @@ async def update_my_profile(
         return await IdentityService(db).update_profile(user_id, user_type, data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+@router.delete("/my-agents/{agent_id}", response_model=DeleteAgentResponse)
+async def delete_my_agent(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """删除当前用户的agent（仅能删除自己的）"""
+    try:
+        owner_id = current_user.sub
+        return await IdentityService(db).delete_agent(owner_id, agent_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "只能删除自己的" in str(e) else status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )

@@ -7,6 +7,7 @@ from app.schemas.a2a import (
     DiscoverRequest, DiscoverResponse,
     MessageSend, MessageResponse, MessageListRequest, MessageListResponse,
     MessageStatusUpdate, MessageStatusResponse, AgentRegistration,
+    TaskCreate, TaskUpdate, TaskResponse, TaskListRequest, TaskListResponse,
 )
 from app.services.a2a import A2AService
 from app.middleware.auth_middleware import get_current_user, require_admin
@@ -137,6 +138,79 @@ async def update_message_status(
         return await service.update_message_status(message_id, data, current_user.sub)
     except ValueError as e:
         if "recipient" in str(e):
+            raise HTTPException(status_code=403, detail=str(e))
+        if "transition" in str(e):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# === Task Negotiation ===
+
+@router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    data: TaskCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """创建A2A任务协商"""
+    service = A2AService(db)
+    try:
+        return await service.create_task(data, current_user.sub)
+    except ValueError as e:
+        if "match" in str(e) or "Forbidden" in str(e):
+            raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/tasks/{agent_id}", response_model=TaskListResponse)
+async def get_tasks(
+    agent_id: str,
+    direction: str = "all",
+    status: str = None,
+    task_type: str = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """查询Agent的任务列表"""
+    service = A2AService(db)
+    params = TaskListRequest(
+        direction=direction,
+        status=status,
+        task_type=task_type,
+        page=page,
+        page_size=page_size,
+    )
+    return await service.get_tasks(agent_id, params)
+
+
+@router.get("/tasks/detail/{task_id}", response_model=TaskResponse)
+async def get_task_detail(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取单个任务详情"""
+    service = A2AService(db)
+    try:
+        return await service.get_task_detail(task_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.put("/tasks/{task_id}", response_model=TaskResponse)
+async def update_task(
+    task_id: str,
+    data: TaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """更新任务状态/提交结果"""
+    service = A2AService(db)
+    try:
+        return await service.update_task(task_id, data, current_user.sub)
+    except ValueError as e:
+        if "recipient" in str(e) or "creator" in str(e):
             raise HTTPException(status_code=403, detail=str(e))
         if "transition" in str(e):
             raise HTTPException(status_code=400, detail=str(e))

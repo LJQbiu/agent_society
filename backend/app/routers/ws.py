@@ -1,9 +1,18 @@
-"""WebSocket路由 — WS endpoint + 状态查询"""
+"""WebSocket路由 — WS endpoint + 状态查询 + Chat"""
+import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.utils.jwt import decode_token
 from app.services.ws_manager import manager
+from app.services.llm import chat_completion
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
+
+# ─── Chat conversation history (in-memory, per session) ───
+# key: ws connection → list of {role, content}
+_chat_sessions: dict = {}
+_MAX_HISTORY = 20  # keep last N messages per session
 
 
 # === WebSocket连接端点 ===
@@ -64,6 +73,80 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(...)):
         manager.disconnect(ws)
     except Exception:
         manager.disconnect(ws)
+
+
+# === Chat WebSocket端点 ===
+@router.websocket("/ws/chat")
+async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
+    """Chat WS — 与Agent对话（LLM驱动）"""
+    # 简化认证: 有token则验证, 无则用匿名
+    user_id = "anonymous"
+    agent_id = "agent-jqagent-8d811ba0"  # 默认JQAgent
+    if token:
+        payload = decode_token(token)
+        if payload:
+            user_id = payload.get("sub", "anonymous")
+
+    await ws.accept()
+    _chat_sessions[ws] = []
+
+    await ws.send_json({
+        "type": "connected",
+        "agent_id": agent_id,
+        "message": "Chat连接已建立",
+    })
+
+    try:
+        while True:
+            data = await ws.receive_json()
+            # 支持两种格式: {text} 或 {type:"message", content, agent_id}
+            text = data.get("text") or data.get("content", "")
+            if not text.strip():
+                continue
+            # 允许客户端指定agent_id
+            if "agent_id" in data:
+                agent_id = data["agent_id"]
+
+            # 追加用户消息到历史
+            history = _chat_sessions[ws]
+            history.append({"role": "user", "content": text})
+            if len(history) > _MAX_HISTORY:
+                history = history[-_MAX_HISTORY:]
+                _chat_sessions[ws] = history
+
+            # 调用LLM
+            try:
+                reply = await chat_completion(
+                    agent_id=agent_id,
+                    messages=history,
+                )
+                # 追加助手回复
+                history.append({"role": "assistant", "content": reply})
+                if len(history) > _MAX_HISTORY:
+                    history = history[-_MAX_HISTORY:]
+                    _chat_sessions[ws] = history
+
+                await ws.send_json({
+                    "type": "reply",
+                    "content": reply,
+                    "agent_id": agent_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception as e:
+                err_type = type(e).__name__
+                err_msg = str(e)[:200] or "(empty)"
+                logger.error(f"Chat LLM error: [{err_type}] {err_msg}")
+                try:
+                    await ws.send_json({
+                        "type": "error",
+                        "content": f"Agent回复失败: {err_msg}",
+                    })
+                except Exception:
+                    pass
+    except WebSocketDisconnect:
+        _chat_sessions.pop(ws, None)
+    except Exception:
+        _chat_sessions.pop(ws, None)
 
 
 # === WS状态查询端点 ===

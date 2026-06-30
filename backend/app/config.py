@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     PORT: int = 8000
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 2
+    # LLM (OpenAI-compatible API)
+    LLM_API_BASE: str = "https://ai-coding-ali.deeproute.cn/v1"
+    LLM_API_KEY: str = ""
+    LLM_MODEL: str = "glm-5.1"
     
     class Config:
         env_file = ".env"

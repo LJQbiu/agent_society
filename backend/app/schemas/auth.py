@@ -95,3 +95,28 @@ class AgentCredentialsResponse(BaseModel):
     client_secret: str
     access_token: str
     expires_in: int
+
+
+# === 密码重置 ===
+class ForgotPasswordRequest(BaseModel):
+    """忘记密码请求 - 提供用户名或邮箱"""
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class ForgotPasswordResponse(BaseModel):
+    """忘记密码响应 - 返回重置token(无MTA时直接返回)"""
+    message: str
+    reset_token: str  # 开发环境直接返回token，生产环境应通过邮件发送
+
+
+class ResetPasswordRequest(BaseModel):
+    """重置密码请求"""
+    reset_token: str
+    new_password: str = Field(min_length=8)
+
+
+class ResetPasswordResponse(BaseModel):
+    """重置密码响应"""
+    message: str
+    username: str

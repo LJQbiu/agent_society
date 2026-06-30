@@ -119,3 +119,57 @@ class AgentRegistration(BaseModel):
     description: str
     capabilities: list[str]
     endpoints: dict[str, Any] = Field(default_factory=dict)
+
+
+# === Task Negotiation ===
+
+class TaskCreate(BaseModel):
+    """创建任务请求"""
+    from_agent_id: str
+    to_agent_id: str
+    task_type: str = "negotiation"  # negotiation|collaboration|delegation|info_request
+    title: str
+    description: str
+    parameters: Optional[dict] = None
+    priority: str = "normal"
+    deadline: Optional[str] = None
+
+
+class TaskUpdate(BaseModel):
+    """更新任务请求（状态变更、结果提交）"""
+    status: Optional[str] = None  # accepted|rejected|in_progress|completed|failed|cancelled
+    result: Optional[dict] = None
+    description: Optional[str] = None
+
+
+class TaskResponse(BaseModel):
+    """任务响应"""
+    task_id: str
+    from_agent_id: str
+    to_agent_id: str
+    task_type: str
+    title: str
+    description: str
+    parameters: Optional[dict] = None
+    result: Optional[dict] = None
+    status: str
+    priority: str
+    deadline: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+
+
+class TaskListRequest(BaseModel):
+    """任务列表查询参数"""
+    direction: str = "all"  # inbound|outbound|all
+    status: Optional[str] = None
+    task_type: Optional[str] = None
+    page: int = 1
+    page_size: int = 20
+
+
+class TaskListResponse(BaseModel):
+    """任务列表响应"""
+    tasks: list[TaskResponse]
+    total: int
+    page: int

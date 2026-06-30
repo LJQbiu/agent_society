@@ -63,3 +63,10 @@ class MyAgentItem(BaseModel):
 class MyAgentsResponse(BaseModel):
     agents: list[MyAgentItem]
     total: int
+
+class DeleteAgentResponse(BaseModel):
+    """用户删除自己agent的响应"""
+    agent_id: str
+    agent_name: str
+    agent_id_str: str
+    message: str = "Agent已删除"

@@ -185,3 +185,99 @@ class UnfreezeAccountResponse(BaseModel):
     current_balance: float
     reason: str
     audit_id: str
+
+# ===== 清理/删除（Admin Dashboard） =====
+
+class PurgeRequest(BaseModel):
+    """批量清理请求"""
+    scope: str = Field(pattern="^(projects|organizations|agents|all)$")
+    filter: str = Field(default="test", pattern="^(test|inactive|all)$")  # test=名称含test, inactive=非active状态, all=全部
+    confirm: bool = Field(default=False)  # 安全确认
+
+class PurgeResponse(BaseModel):
+    scope: str
+    filter: str
+    deleted_projects: int = 0
+    deleted_organizations: int = 0
+    deleted_agents: int = 0
+    audit_id: str
+    message: str
+
+class DeleteProjectResponse(BaseModel):
+    project_id: str
+    project_name: str
+    audit_id: str
+    message: str
+
+class DeleteOrganizationResponse(BaseModel):
+    org_id: str
+    org_name: str
+    audit_id: str
+    message: str
+
+class DeleteAgentResponse(BaseModel):
+    agent_id: str
+    agent_name: str
+    audit_id: str
+    message: str
+
+class ProjectListItem(BaseModel):
+    id: str
+    name: str
+    type: str
+    status: str
+    budget: float
+    creator_id: str
+    created_at: Optional[datetime] = None
+
+class OrganizationListItem(BaseModel):
+    id: str
+    name: str
+    org_type: str
+    status: str
+    reputation: float
+    creator_id: str
+    created_at: Optional[datetime] = None
+
+class AgentListItem(BaseModel):
+    id: str
+    agent_id_str: str
+    name: str
+    status: str
+    owner_id: str
+    capabilities: list = []
+    created_at: Optional[datetime] = None
+
+class AdminDashboardStats(BaseModel):
+    total_projects: int
+    total_organizations: int
+    total_agents: int
+    total_humans: int
+    total_messages: int
+    active_projects: int
+    active_organizations: int
+    active_agents: int
+
+class AdminDashboardResponse(BaseModel):
+    stats: AdminDashboardStats
+    recent_projects: list[ProjectListItem] = []
+    recent_organizations: list[OrganizationListItem] = []
+    recent_agents: list[AgentListItem] = []
+
+class ListProjectsResponse(BaseModel):
+    projects: list[ProjectListItem]
+    total: int
+    page: int
+    page_size: int
+
+class ListOrganizationsResponse(BaseModel):
+    organizations: list[OrganizationListItem]
+    total: int
+    page: int
+    page_size: int
+
+class ListAgentsResponse(BaseModel):
+    agents: list[AgentListItem]
+    total: int
+    page: int
+    page_size: int

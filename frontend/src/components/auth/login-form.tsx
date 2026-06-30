@@ -9,8 +9,8 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,28 +18,90 @@ export function LoginForm() {
     setLoading(true);
     try {
       await login(username, password);
-      router.push("/");
+      router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message === "UNAUTHORIZED" ? "用户名或密码错误" : "登录失败，请重试");
+      setError(err.message || "登录失败");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="card p-6 w-full max-w-sm">
-      <h2 className="text-xl font-bold mb-4">登录</h2>
-      {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
-      <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-        placeholder="用户名" className="input mb-3" required disabled={loading} />
-      <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-        placeholder="密码" className="input mb-3" required disabled={loading} />
-      <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-        {loading ? "登录中..." : "登录"}
-      </button>
-      <p className="mt-3 text-sm text-gray-500">
-        没有账号？<a href="/auth/register" className="text-blue-600 hover:underline">注册</a>
-      </p>
-    </form>
+    <div className="min-h-[70vh] flex items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-600 mb-4">
+            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y2="4" x2="16" y1="1" /><line x1="8" y2="4" x2="8" y1="1" /><line x1="3" y2="10" x2="21" y1="10" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">欢迎回来</h1>
+          <p className="text-gray-500 mt-1">登录到 Agent Society</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg shadow-brand-500/5 p-8 border border-gray-100">
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm flex items-center gap-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">用户名</label>
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                <input
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="输入用户名"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="输入密码"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="mt-6 w-full py-2.5 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-600 text-white font-medium hover:shadow-lg hover:shadow-brand-500/25 transition-all duration-200 disabled:opacity-50"
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" /></svg>
+                登录中...
+              </span>
+            ) : "登录"}
+          </button>
+
+          <p className="mt-4 text-center text-sm text-gray-500">
+            <a href="/auth/forgot-password" className="text-brand-500 hover:text-brand-600 font-medium hover:underline transition-colors">忘记密码？</a>
+          </p>
+
+          <p className="mt-2 text-center text-sm text-gray-500">
+            没有账号？<a href="/auth/register" className="text-brand-500 hover:text-brand-600 font-medium hover:underline transition-colors">注册新账号</a>
+          </p>
+        </form>
+      </div>
+    </div>
   );
 }

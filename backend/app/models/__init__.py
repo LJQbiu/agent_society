@@ -6,12 +6,12 @@ from app.models.organization import Organization, OrganizationMember
 from app.models.project import Project, ProjectParticipant
 from app.models.transaction import Transaction
 from app.models.governance import GovernanceEvent, Admin, OAuthClient, AuthorizationCode, RefreshToken
-from app.models.a2a import Message, AgentCardVersion
+from app.models.a2a import Message, AgentCardVersion, Task
 
 __all__ = [
     "Base", "UUIDMixin", "TimestampMixin",
     "Human", "Agent", "Organization", "OrganizationMember",
     "Project", "ProjectParticipant", "Transaction",
     "GovernanceEvent", "Admin", "OAuthClient", "AuthorizationCode", "RefreshToken",
-    "Message", "AgentCardVersion",
+    "Message", "AgentCardVersion", "Task",
 ]

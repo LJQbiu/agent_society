@@ -46,3 +46,28 @@ class AgentCardVersion(Base, UUIDMixin, TimestampMixin):
         Index("idx_card_ver_agent", "agent_id"),
         UniqueConstraint("agent_id", "version", name="idx_card_ver_agent_version"),
     )
+
+
+class Task(Base, UUIDMixin, TimestampMixin):
+    """A2A任务协商"""
+    __tablename__ = "tasks"
+
+    from_agent_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    to_agent_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False)  # negotiation|collaboration|delegation|info_request
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSONB, nullable=True)  # 任务参数
+    result: Mapped[dict] = mapped_column(JSONB, nullable=True)  # 任务结果
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending|accepted|rejected|in_progress|completed|failed|cancelled
+    priority: Mapped[str] = mapped_column(String(10), default="normal")  # normal|urgent|low
+    deadline: Mapped[str] = mapped_column(String(50), nullable=True)  # ISO8601 deadline
+
+    __table_args__ = (
+        Index("idx_task_from", "from_agent_id"),
+        Index("idx_task_to", "to_agent_id"),
+        Index("idx_task_status", "status"),
+        Index("idx_task_created", "created_at"),
+    )

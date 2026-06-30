@@ -10,9 +10,12 @@ from app.schemas.auth import (
     TokenRequest, BindAgentRequest, BindAgentResponse,
     AgentCredentialsRequest, AgentCredentialsResponse,
     RefreshTokenRequest, TokenPayload,
+    ForgotPasswordRequest, ForgotPasswordResponse,
+    ResetPasswordRequest, ResetPasswordResponse,
 )
 from app.services.auth_service import AuthService
 from app.middleware.auth_middleware import get_current_user
+from app.utils.jwt import decode_token
 from app.utils.jwt import decode_token, create_token
 from datetime import timedelta
 
@@ -155,6 +158,31 @@ async def logout(response: Response):
     return {"message": "Logged out successfully"}
 
 
+# === 密码重置 ===
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """忘记密码 - 生成重置token（开发环境直接返回，生产环境应发邮件）"""
+    svc = AuthService(db)
+    try:
+        result = await svc.forgot_password(data)
+        await db.commit()
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """重置密码 - 使用重置token + 新密码"""
+    svc = AuthService(db)
+    try:
+        result = await svc.reset_password(data)
+        await db.commit()
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 # === Agent绑定 ===
 @router.post("/bind-agent", response_model=BindAgentResponse)
 async def bind_agent(
@@ -224,3 +252,21 @@ async def get_ws_token(request: Request):
     )
 
     return {"ws_token": ws_token, "expires_in": 300}
+
+
+# === 获取当前JWT Token ===
+@router.get("/my-token")
+async def get_my_token(request: Request, user: TokenPayload = Depends(get_current_user)):
+    """获取当前用户的JWT access_token — 通过httpOnly Cookie认证后返回raw JWT字符串
+
+    用途: 用户在其他平台(如OpenClaw、GenericAgent等)接入Agent时，
+    需要JWT作为Bearer Token调用本平台API。由于JWT存储在httpOnly Cookie中，
+    浏览器JS无法直接读取，此端点提供安全方式获取。
+    """
+    access_token = request.cookies.get("access_token_cookie")
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No access token cookie — please login first",
+        )
+    return {"access_token": access_token, "user_type": user.user_type, "sub": user.sub, "expires_at": user.exp}

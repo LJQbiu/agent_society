@@ -8,11 +8,13 @@ const PUBLIC_PATHS = [
   "/auth/register",
   "/docs",
   "/skills",
-  "/_next",
+  "/favicon.ico",
+  "/favicon.svg",
+  "/apple-touch-icon.svg",
+  "/logo.svg",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",
-  "/favicon.ico",
 ];
 
 export function middleware(request: NextRequest) {
@@ -40,5 +42,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   // 排除静态资源和所有API代理路径（API代理由后端自己鉴权）
   // 只有前端页面路由需要middleware做认证检查
-  matcher: ["/((?!_next/static|_next/image|api).*)"],
+  matcher: ["/((?!_next/static|_next/image|api|.*\\.svg|.*\\.png|.*\\.ico).*)"],
 };
