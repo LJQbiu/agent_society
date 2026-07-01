@@ -137,17 +137,23 @@ class ProjectService:
             raise ValueError("Project not found")
         return ProjectResponse.model_validate(project)
 
-    async def list_projects(self, limit: int = 20, offset: int = 0, status: str = None) -> ProjectListResponse:
-        """List projects with optional status filter"""
+    async def list_projects(self, limit: int = 20, offset: int = 0, status: str = None, owner_id: str = None) -> ProjectListResponse:
+        """List projects with optional status/owner_id filter"""
         query = select(Project).offset(offset).limit(limit)
         if status:
             query = query.where(Project.status == status)
+        if owner_id:
+            # Filter projects where creator agent belongs to this human owner
+            query = query.join(Agent, Project.creator_id == Agent.id).where(Agent.owner_id == UUID(owner_id))
+
         result = await self.db.execute(query)
         projects = result.scalars().all()
 
         count_query = select(Project)
         if status:
             count_query = count_query.where(Project.status == status)
+        if owner_id:
+            count_query = count_query.join(Agent, Project.creator_id == Agent.id).where(Agent.owner_id == UUID(owner_id))
         count_result = await self.db.execute(count_query)
         total = len(count_result.scalars().all())
 

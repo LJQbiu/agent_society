@@ -18,11 +18,15 @@ export function ProjectManager() {
   const [tab, setTab] = useState<Tab>("list");
   const [projects, setProjects] = useState<ProjectCRUDResponse[]>([]);
   const [search, setSearch] = useState("");
+  const [myOnly, setMyOnly] = useState(false);  // "我的项目" toggle
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedProject, setSelectedProject] = useState<ProjectCRUDResponse | null>(null);
   const [participants, setParticipants] = useState<ProjectParticipantResponse[]>([]);
   const [myAgents, setMyAgents] = useState<MyAgentsResponse | null>(null);
+  const [selectedJoinAgent, setSelectedJoinAgent] = useState<string>("");
+  const [messages, setMessages] = useState<any[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   // Create form
   const [createForm, setCreateForm] = useState<ProjectCreateRequest>({
@@ -50,6 +54,7 @@ export function ProjectManager() {
     try {
       const params: Record<string, string> = {};
       if (search) params.search = search;
+      if (myOnly && user?.id) params.owner_id = user.id;
       const data = await api.projects.list(params);
       setProjects(data.projects || []);
     } catch (e: any) {
@@ -59,7 +64,7 @@ export function ProjectManager() {
     }
   };
 
-  useEffect(() => { loadProjects(); api.identity.myAgents().then(r => setMyAgents(r)).catch(() => {}); }, []);
+  useEffect(() => { loadProjects(); api.identity.myAgents().then(r => setMyAgents(r)).catch(() => {}); }, [myOnly]);
 
   // Create project
   const handleCreate = async (e: React.FormEvent) => {
@@ -87,6 +92,12 @@ export function ProjectManager() {
       setSelectedProject(proj);
       const members = await api.projects.listParticipants(id);
       setParticipants(members.participants || []);
+      setMessagesLoading(true);
+      try {
+        const msgData = await api.projects.getMessages(id);
+        setMessages(msgData.messages || []);
+      } catch { setMessages([]); }
+      setMessagesLoading(false);
       setTab("detail");
     } catch (e: any) {
       setError(e.message || "Failed to load project");
@@ -109,8 +120,8 @@ export function ProjectManager() {
 
   // Join project
   const handleJoin = async (projectId: string) => {
-    const agentId = myAgents?.agents?.[0]?.id;
-    if (!agentId) { setError("No agent registered. Please register an agent first."); return; }
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    if (!agentId) { setError("No agent selected. Please select an agent first."); return; }
     try {
       const payload: JoinProjectRequest = { agent_id: agentId };
       await api.projects.join(projectId, payload);
@@ -122,8 +133,8 @@ export function ProjectManager() {
 
   // Leave project
   const handleLeave = async (projectId: string) => {
-    const agentId = myAgents?.agents?.[0]?.id;
-    if (!agentId) { setError("No agent registered."); return; }
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    if (!agentId) { setError("No agent selected."); return; }
     try {
       await api.projects.leave(projectId, { agent_id: agentId } as JoinProjectRequest);
       viewDetail(projectId);
@@ -169,9 +180,26 @@ export function ProjectManager() {
       {/* List tab */}
       {tab === "list" && (
         <div>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 items-center">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..." className="border p-2 rounded flex-1" />
+            <select
+              value={selectedJoinAgent}
+              onChange={e => setSelectedJoinAgent(e.target.value)}
+              className="border p-2 rounded text-sm"
+            >
+              <option value="">选择Agent...</option>
+              {myAgents?.agents?.map(a => (
+                <option key={a.id} value={a.id}>{a.name || a.id}</option>
+              ))}
+            </select>
             <button onClick={loadProjects} className="bg-blue-600 text-white px-3 py-2 rounded">Search</button>
+            <button
+              onClick={() => setMyOnly(!myOnly)}
+              className={myOnly ? "bg-purple-600 text-white px-3 py-2 rounded" : "bg-gray-200 px-3 py-2 rounded"}
+              title="Show only projects created by my agents"
+            >
+              🏠 My Projects
+            </button>
           </div>
           {loading ? <p>Loading...</p> : (
             <table className="w-full border-collapse">
@@ -193,7 +221,7 @@ export function ProjectManager() {
                     <td className="p-2">{p.budget || 0}</td>
                     <td className="p-2 flex gap-1">
                       <button onClick={() => viewDetail(p.id)} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">View</button>
-                      <button onClick={() => handleJoin(p.id)} className="bg-green-500 text-white px-2 py-1 rounded text-sm">Join</button>
+                      <button onClick={() => handleJoin(p.id)} className="bg-green-500 text-white px-2 py-1 rounded text-sm" disabled={!selectedJoinAgent && !myAgents?.agents?.[0]?.id}>🤝 加入</button>
                     </td>
                   </tr>
                 ))}
@@ -265,9 +293,19 @@ export function ProjectManager() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2">
-            <button onClick={() => handleJoin(selectedProject.id)} className="bg-green-600 text-white px-3 py-1 rounded">Join</button>
-            <button onClick={() => handleLeave(selectedProject.id)} className="bg-red-500 text-white px-3 py-1 rounded">Leave</button>
+          <div className="flex gap-2 items-center">
+            <select
+              value={selectedJoinAgent}
+              onChange={e => setSelectedJoinAgent(e.target.value)}
+              className="border p-1 rounded text-sm"
+            >
+              <option value="">选择Agent...</option>
+              {myAgents?.agents?.map(a => (
+                <option key={a.id} value={a.id}>{a.name || a.id}</option>
+              ))}
+            </select>
+            <button onClick={() => handleJoin(selectedProject.id)} className="bg-green-600 text-white px-3 py-1 rounded text-sm" disabled={!selectedJoinAgent && !myAgents?.agents?.[0]?.id}>🤝 加入</button>
+            <button onClick={() => handleLeave(selectedProject.id)} className="bg-red-500 text-white px-3 py-1 rounded text-sm">🚪 退出</button>
             <div className="flex gap-1 items-center">
               <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="border p-1 rounded">
                 <option value="">Change status...</option>
@@ -304,6 +342,35 @@ export function ProjectManager() {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+
+          {/* Conversation Stream */}
+          <div className="bg-white p-4 rounded shadow">
+            <h3 className="font-bold mb-2">💬 Agent Conversation Stream</h3>
+            {messagesLoading ? <p className="text-gray-400">Loading messages...</p> : messages.length === 0 ? (
+              <p className="text-gray-400 italic">No A2A messages yet between project agents.</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {messages.map((msg, i) => (
+                  <div key={msg.message_id || i} className={`flex gap-2 p-2 rounded ${msg.from_agent_name === selectedProject?.name ? "bg-blue-50" : "bg-green-50"}`}>
+                    <div className="flex-shrink-0 w-24">
+                      <span className="font-semibold text-sm" title={msg.from_agent_id}>{msg.from_agent_name}</span>
+                      <svg className="inline w-3 h-3 mx-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      <span className="font-semibold text-sm" title={msg.to_agent_id}>{msg.to_agent_name}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm break-words">{msg.text || (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}</p>
+                      <div className="flex gap-2 text-xs text-gray-400 mt-1">
+                        <span>{msg.message_type}</span>
+                        <span>{msg.priority}</span>
+                        <span>{msg.status}</span>
+                        {msg.created_at && <span>{new Date(msg.created_at).toLocaleString()}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

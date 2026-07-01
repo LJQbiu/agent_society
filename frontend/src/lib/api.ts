@@ -209,13 +209,15 @@ class ApiClient {
       this.request("POST", `/organization/${orgId}/join`, data || {}),
     listMembers: (orgId: string) =>
       this.request<MemberListResponse>("GET", `/organization/${orgId}/members`),
+    getMessages: (orgId: string, limit: number = 50) =>
+      this.request<{ messages: any[]; total: number }>("GET", `/organization/${orgId}/messages?limit=${limit}`),
   };
 
   // === Project CRUD ===
   projects = {
     create: (data: ProjectCreateRequest) =>
       this.request<ProjectCRUDResponse>("POST", "/project/create", data),
-    list: (params: { limit?: number; offset?: number; status?: string; type?: string } = {}) =>
+    list: (params: { limit?: number; offset?: number; status?: string; type?: string; owner_id?: string } = {}) =>
       this.request<ProjectCRUDListResponse>("GET", `/project/list?${cleanParams(params)}`),
     get: (projectId: string) =>
       this.request<ProjectCRUDResponse>("GET", `/project/${projectId}`),
@@ -229,6 +231,8 @@ class ApiClient {
       this.request("PATCH", `/project/${projectId}/status`, data),
     listParticipants: (projectId: string) =>
       this.request<ParticipantListResponse>("GET", `/project/${projectId}/participants`),
+    getMessages: (projectId: string, limit: number = 50) =>
+      this.request<{ messages: any[]; total: number }>("GET", `/project/${projectId}/messages?limit=${limit}`),
   };
 
   // === A2A ===
