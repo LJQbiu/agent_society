@@ -516,20 +516,23 @@ class ProjectService:
         return ChatMessageResponse.model_validate(message)
 
     async def list_chat_messages(self, project_id: str, limit: int = 50, offset: int = 0) -> ChatMessageListResponse:
-        """List chat messages for a project"""
-        result = await self.db.execute(
-            select(ProjectChatMessage).where(
-                ProjectChatMessage.project_id == UUID(project_id),
-            ).order_by(ProjectChatMessage.created_at).offset(offset).limit(limit)
-        )
-        messages = result.scalars().all()
-
-        count_result = await self.db.execute(
-            select(ProjectChatMessage).where(
+        """List chat messages for a project - returns newest messages first (then reversed for display)"""
+        # Count total
+        from sqlalchemy import func
+        total_result = await self.db.execute(
+            select(func.count()).select_from(ProjectChatMessage).where(
                 ProjectChatMessage.project_id == UUID(project_id),
             )
         )
-        total = len(count_result.scalars().all())
+        total = total_result.scalar() or 0
+
+        # Fetch newest messages (desc order), then reverse for chronological display
+        result = await self.db.execute(
+            select(ProjectChatMessage).where(
+                ProjectChatMessage.project_id == UUID(project_id),
+            ).order_by(ProjectChatMessage.created_at.desc()).limit(limit).offset(offset)
+        )
+        messages = list(reversed(result.scalars().all()))
 
         return ChatMessageListResponse(
             messages=[ChatMessageResponse.model_validate(m) for m in messages],
