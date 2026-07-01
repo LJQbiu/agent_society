@@ -58,7 +58,7 @@ class ProjectTodo(Base, UUIDMixin, TimestampMixin):
     description: Mapped[str] = mapped_column(String(1000), default="")
     priority: Mapped[str] = mapped_column(String(10), default="medium")  # high|medium|low
     status: Mapped[str] = mapped_column(String(20), default="open")  # open|claimed|in_progress|completed|cancelled
-    created_by: Mapped[str] = mapped_column(String(100), nullable=False)  # agent_id of leader
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)  # agent_id of leader
     claimed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
     claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     

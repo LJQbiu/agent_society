@@ -556,7 +556,7 @@ class ProjectService:
             description=req.description,
             priority=req.priority,
             status="open",
-            created_by=str(agent_id),
+            created_by=agent_id,
         )
         self.db.add(todo)
         await self.db.commit()
