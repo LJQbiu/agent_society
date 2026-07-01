@@ -1,9 +1,13 @@
 """Project service - CRUD operations"""
+import asyncio
+import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project, ProjectParticipant, ProjectChatMessage, ProjectTodo
 from app.models.agent import Agent
 from app.models.human import Human
+from app.database import async_session
+from app.services.llm import chat_completion
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ProjectParticipantResponse, ProjectListResponse,
@@ -469,7 +473,7 @@ class ProjectService:
             id=uuid4(),
             project_id=pid,
             sender_type=req.sender_type,
-            sender_id=sender_id,
+            sender_id=str(sender_id),
             sender_name=sender_name,
             content=req.content,
         )
@@ -503,6 +507,10 @@ class ProjectService:
                     )
         except Exception:
             pass
+
+        # Trigger multi-agent auto-reply dialogue (background task)
+        if req.sender_type == "human":
+            asyncio.create_task(_trigger_multi_agent_dialogue(str(pid)))
 
         return ChatMessageResponse.model_validate(message)
 
@@ -544,7 +552,7 @@ class ProjectService:
             description=req.description,
             priority=req.priority,
             status="open",
-            created_by=agent_id,
+            created_by=str(agent_id),
         )
         self.db.add(todo)
         await self.db.commit()
@@ -700,3 +708,163 @@ class ProjectService:
             pass
 
         return resp
+
+
+
+# ─── Multi-Agent Auto-Reply Dialogue ───
+_logger = logging.getLogger(__name__)
+_running_dialogues: set[str] = set()  # debounce: prevent overlapping tasks
+
+async def _trigger_multi_agent_dialogue(project_id: str, rounds: int = 3):
+    """Background task: agents auto-reply with multi-round dialogue."""
+    # Debounce: skip if dialogue already running for this project
+    if project_id in _running_dialogues:
+        _logger.info(f"Dialogue already running for project {project_id}, skipping")
+        return
+    _running_dialogues.add(project_id)
+    try:
+        async with async_session() as db:
+            # Get project info
+            proj_result = await db.execute(
+                select(Project).where(Project.id == UUID(project_id))
+            )
+            project = proj_result.scalars().first()
+            if not project:
+                return
+
+            # Get all active participants (all are agents in project_participants table)
+            p_result = await db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == UUID(project_id),
+                    ProjectParticipant.status == "active",
+                )
+            )
+            participants = p_result.scalars().all()
+            if not participants:
+                return
+
+            # Get agent details for each participant
+            agent_ids = [p.agent_id for p in participants]
+            a_result = await db.execute(
+                select(Agent).where(Agent.id.in_(agent_ids))
+            )
+            agents = a_result.scalars().all()
+            if not agents:
+                return
+
+            # Build agent info map (keyed by agent_id_str for LLM personality)
+            agent_map = {
+                a.agent_id_str: {"name": a.name, "desc": a.description, "id": str(a.id)}
+                for a in agents
+            }
+
+            # Build context for system prompt
+            other_agents_desc = "\n".join(
+                f"- {info['name']} ({aid}): {info['desc']}"
+                for aid, info in agent_map.items()
+            )
+            project_context = (
+                f"你正在参与项目「{project.name}」的团队讨论。\n"
+                f"项目描述：{project.description or '无'}\n"
+                f"团队成员：\n{other_agents_desc}\n"
+                f"请用中文回复，作为团队成员参与讨论，分享你的见解。"
+            )
+
+            # Load recent chat history (last 20 messages)
+            chat_result = await db.execute(
+                select(ProjectChatMessage).where(
+                    ProjectChatMessage.project_id == UUID(project_id),
+                ).order_by(ProjectChatMessage.created_at.desc()).limit(20)
+            )
+            history_msgs = list(reversed(chat_result.scalars().all()))
+
+            # Convert to LLM messages format
+            llm_messages = []
+            for msg in history_msgs:
+                role = "assistant" if msg.sender_type == "agent" else "user"
+                content = f"[{msg.sender_name}]: {msg.content}"
+                llm_messages.append({"role": role, "content": content})
+
+            # Multi-round dialogue
+            agent_list = list(agents)
+            for round_num in range(rounds):
+                for agent in agent_list:
+                    # Build per-agent messages with context
+                    agent_messages = [
+                        {"role": "system", "content": project_context},
+                    ] + llm_messages
+
+                    # Add a prompt for the current agent to speak
+                    agent_messages.append({
+                        "role": "user",
+                        "content": f"现在轮到你（{agent.name}）发言，请回应上述讨论。"
+                    })
+
+                    # Call LLM
+                    try:
+                        reply_text = await chat_completion(
+                            messages=agent_messages,
+                            agent_id=agent.agent_id_str,
+                        )
+                    except Exception as e:
+                        _logger.error(f"LLM call failed for {agent.name}: {e}")
+                        reply_text = f"[{agent.name}暂时无法回复]"
+
+                    # Save agent's response as chat message
+                    chat_msg = ProjectChatMessage(
+                        id=uuid4(),
+                        project_id=UUID(project_id),
+                        sender_type="agent",
+                        sender_id=agent.agent_id_str,
+                        sender_name=agent.name,
+                        content=reply_text,
+                    )
+                    db.add(chat_msg)
+                    await db.commit()
+                    await db.refresh(chat_msg)
+
+                    # Update conversation history for next agent
+                    llm_messages.append({
+                        "role": "assistant",
+                        "content": f"[{agent.name}]: {reply_text}",
+                    })
+
+                    # Push via WebSocket to all project participants (via agent owner)
+                    try:
+                        all_p_result = await db.execute(
+                            select(ProjectParticipant).where(
+                                ProjectParticipant.project_id == UUID(project_id),
+                                ProjectParticipant.status == "active",
+                            )
+                        )
+                        all_participants = all_p_result.scalars().all()
+                        for p in all_participants:
+                            agt = await db.execute(
+                                select(Agent).where(Agent.id == p.agent_id)
+                            )
+                            agent_obj = agt.scalar_one_or_none()
+                            if agent_obj and agent_obj.owner_id:
+                                await manager.send_to_user(
+                                    str(agent_obj.owner_id),
+                                    {
+                                        "type": "project_chat_message",
+                                        "data": {
+                                            "project_id": project_id,
+                                            "sender_name": agent.name,
+                                            "sender_type": "agent",
+                                            "content": reply_text,
+                                        }
+                                    }
+                                )
+                    except Exception:
+                        pass
+
+                    # Delay between agent responses for natural feel
+                    await asyncio.sleep(2)
+
+            _logger.info(f"Multi-agent dialogue completed for project {project_id}: {rounds} rounds")
+
+    except Exception as e:
+        _logger.error(f"Multi-agent dialogue failed for project {project_id}: {e}")
+    finally:
+        _running_dialogues.discard(project_id)
