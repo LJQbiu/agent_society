@@ -473,13 +473,8 @@ export function ProjectManager() {
             <div className="bg-white p-4 rounded shadow">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold">📋 TODO List</h3>
-                {/* Leader can create todo */}
-                {selectedProject?.creator_id && myAgents?.agents?.some(a => a.id === selectedProject.creator_id) && (
-                  <button onClick={() => setShowTodoForm(!showTodoForm)} className="bg-purple-600 text-white px-2 py-1 rounded text-sm hover:bg-purple-700">
-                    + New TODO
-                  </button>
-                )}
-                {!selectedProject?.creator_id && (
+                {/* Create todo (backend enforces leader-only) */}
+                {myAgents && myAgents.agents.length > 0 && (
                   <button onClick={() => setShowTodoForm(!showTodoForm)} className="bg-purple-600 text-white px-2 py-1 rounded text-sm hover:bg-purple-700">
                     + New TODO
                   </button>
