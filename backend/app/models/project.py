@@ -1,5 +1,5 @@
 """项目模型"""
-from sqlalchemy import Column, String, Float, ForeignKey, Integer, DateTime
+from sqlalchemy import Column, String, Float, ForeignKey, Integer, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.models.base import Base, UUIDMixin, TimestampMixin, Mapped, mapped_column
@@ -45,7 +45,7 @@ class ProjectChatMessage(Base, UUIDMixin, TimestampMixin):
     sender_type: Mapped[str] = mapped_column(String(10), nullable=False)  # human|agent
     sender_id: Mapped[str] = mapped_column(String(100), nullable=False)  # agent_id or user_id
     sender_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    content: Mapped[str] = mapped_column(String(2000), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     
     project = relationship("Project", back_populates="chat_messages")
 
