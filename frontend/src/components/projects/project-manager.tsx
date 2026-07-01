@@ -325,7 +325,7 @@ export function ProjectManager() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border p-2">Agent ID</th>
+                    <th className="border p-2">Agent</th>
                     <th className="border p-2">Role</th>
                     <th className="border p-2">Status</th>
                     <th className="border p-2">Joined</th>
@@ -334,10 +334,13 @@ export function ProjectManager() {
                 <tbody>
                   {participants.map(p => (
                     <tr key={p.agent_id} className="border">
-                      <td className="p-2">{p.agent_id}</td>
+                      <td className="p-2">
+                        <span className="font-semibold">{p.agent_name || "Unknown"}</span>
+                        <span className="text-xs text-gray-400 ml-1" title={p.agent_id}>{p.agent_id.slice(0,8)}...</span>
+                      </td>
                       <td className="p-2">{p.role}</td>
                       <td className="p-2">{p.status}</td>
-                      <td className="p-2">{p.created_at || "-"}</td>
+                      <td className="p-2">{p.created_at ? new Date(p.created_at).toLocaleString() : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

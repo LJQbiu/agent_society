@@ -49,6 +49,7 @@ class ProjectParticipantResponse(BaseModel):
     id: UUID
     project_id: UUID
     agent_id: UUID
+    agent_name: Optional[str] = None
     role: str
     status: str
     contribution_score: float

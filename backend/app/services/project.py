@@ -380,14 +380,21 @@ class ProjectService:
         return ProjectResponse.model_validate(project)
 
     async def list_participants(self, project_id: str) -> ParticipantListResponse:
-        """List project participants"""
+        """List project participants with agent names"""
         result = await self.db.execute(
-            select(ProjectParticipant).where(
+            select(ProjectParticipant, Agent.name).join(
+                Agent, Agent.id == ProjectParticipant.agent_id, isouter=True
+            ).where(
                 ProjectParticipant.project_id == UUID(project_id),
             )
         )
-        participants = result.scalars().all()
+        rows = result.all()
+        participants = []
+        for participant, agent_name in rows:
+            resp = ProjectParticipantResponse.model_validate(participant)
+            resp.agent_name = agent_name or "Unknown"
+            participants.append(resp)
         return ParticipantListResponse(
-            participants=[ProjectParticipantResponse.model_validate(p) for p in participants],
+            participants=participants,
             total=len(participants),
         )

@@ -438,6 +438,7 @@ export interface ProjectParticipantResponse {
   id: string;
   project_id: string;
   agent_id: string;
+  agent_name?: string;
   role: string;
   status: string;
   contribution_score: number;
