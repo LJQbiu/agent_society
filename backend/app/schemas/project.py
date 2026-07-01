@@ -90,7 +90,7 @@ class ChatMessageResponse(BaseModel):
     id: UUID
     project_id: UUID
     sender_type: str  # human | agent
-    sender_id: UUID   # human_id or agent_id
+    sender_id: str   # human_id or agent_id (can be UUID or agent_id_str)
     sender_name: str
     content: str
     created_at: datetime
