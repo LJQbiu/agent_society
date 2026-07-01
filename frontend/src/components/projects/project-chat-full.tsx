@@ -18,11 +18,29 @@ export function ProjectChatFull({ projectId, projectName }: ProjectChatFullProps
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevLenRef = useRef(0);
 
-  // Auto-scroll to bottom
-  const scrollToBottom = () => {
+  // Auto-scroll to bottom - only if user is near bottom
+  const scrollToBottom = (force = false) => {
+    if (!messagesContainerRef.current) return;
+    if (!force) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      if (scrollHeight - scrollTop - clientHeight > 150) return; // not near bottom, don't scroll
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Listen for scroll events to detect manual scroll-up
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      // No-op needed - just for future enhancement
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Poll chat messages
   useEffect(() => {
@@ -30,7 +48,8 @@ export function ProjectChatFull({ projectId, projectName }: ProjectChatFullProps
       try {
         const chatData = await api.projects.listChatMessages(projectId);
         const newMsgs = chatData.messages || [];
-        const prevLen = chatMessages.length;
+        const prevLen = prevLenRef.current;
+        prevLenRef.current = newMsgs.length;
         setChatMessages(newMsgs);
         if (newMsgs.length > prevLen) scrollToBottom();
       } catch {}
@@ -50,7 +69,7 @@ export function ProjectChatFull({ projectId, projectName }: ProjectChatFullProps
       setChatInput("");
       const chatData = await api.projects.listChatMessages(projectId);
       setChatMessages(chatData.messages || []);
-      scrollToBottom();
+      scrollToBottom(true);
     } catch (e: any) {
       setError(e.message || "Failed to send message");
     } finally {
@@ -70,7 +89,7 @@ export function ProjectChatFull({ projectId, projectName }: ProjectChatFullProps
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50">
         {chatMessages.length === 0 ? (
           <p className="text-gray-400 italic text-center py-8">No messages yet. Start a conversation!</p>
         ) : chatMessages.map((msg) => (
