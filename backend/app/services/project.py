@@ -1,12 +1,15 @@
 """Project service - CRUD operations"""
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.project import Project, ProjectParticipant
+from app.models.project import Project, ProjectParticipant, ProjectChatMessage, ProjectTodo
 from app.models.agent import Agent
+from app.models.human import Human
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ProjectParticipantResponse, ProjectListResponse,
     ParticipantListResponse, JoinProjectRequest, StatusTransitionRequest,
+    ChatMessageCreate, ChatMessageResponse, ChatMessageListResponse,
+    TodoCreate, TodoUpdate, TodoClaimRequest, ProjectTodoResponse, TodoListResponse,
 )
 from uuid import UUID, uuid4
 from app.services.ws_manager import manager
@@ -398,3 +401,302 @@ class ProjectService:
             participants=participants,
             total=len(participants),
         )
+
+    # ---- Chat Message Methods ----
+
+    async def send_chat_message(self, project_id: str, req: ChatMessageCreate, current_user) -> ChatMessageResponse:
+        """Send a chat message in project (human or agent)"""
+        pid = UUID(project_id)
+        
+        # Verify project exists
+        result = await self.db.execute(select(Project).where(Project.id == pid))
+        project = result.scalar_one_or_none()
+        if not project:
+            raise ValueError("Project not found")
+
+        sender_id = None
+        sender_name = None
+
+        if req.sender_type == "human":
+            # Human user - use their ID and username
+            if current_user.user_type != "human":
+                raise ValueError("Only human users can send messages as human")
+            sender_id = UUID(current_user.sub)
+            # Fetch human name
+            human_result = await self.db.execute(select(Human).where(Human.id == sender_id))
+            human_obj = human_result.scalar_one_or_none()
+            sender_name = human_obj.username if human_obj else "Human"
+        elif req.sender_type == "agent":
+            # Agent user - use resolved agent_id
+            sender_id = await self._resolve_agent_id(current_user)
+            agent_result = await self.db.execute(select(Agent).where(Agent.id == sender_id))
+            agent_obj = agent_result.scalar_one_or_none()
+            sender_name = agent_obj.name if agent_obj else "Agent"
+        else:
+            raise ValueError(f"Invalid sender_type: {req.sender_type}")
+
+        # Verify sender is a project participant (or human owner of participant)
+        if req.sender_type == "agent":
+            p_result = await self.db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == pid,
+                    ProjectParticipant.agent_id == sender_id,
+                    ProjectParticipant.status == "active",
+                )
+            )
+            if not p_result.scalar_one_or_none():
+                raise ValueError("Only active participants can send messages")
+        elif req.sender_type == "human":
+            # Human must own at least one agent in the project
+            agent_result = await self.db.execute(
+                select(Agent).where(Agent.owner_id == sender_id)
+            )
+            agents = agent_result.scalars().all()
+            agent_ids = [a.id for a in agents]
+            if not agent_ids:
+                raise ValueError("Human must have an agent in the project to chat")
+            p_result = await self.db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == pid,
+                    ProjectParticipant.agent_id.in_(agent_ids),
+                    ProjectParticipant.status == "active",
+                )
+            )
+            if not p_result.scalars().first():
+                raise ValueError("Human must have an active agent participant to chat")
+
+        message = ProjectChatMessage(
+            id=uuid4(),
+            project_id=pid,
+            sender_type=req.sender_type,
+            sender_id=sender_id,
+            sender_name=sender_name,
+            content=req.content,
+        )
+        self.db.add(message)
+        await self.db.commit()
+        await self.db.refresh(message)
+
+        # WebSocket push: notify all participants about new chat message
+        try:
+            participants_result = await self.db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == pid,
+                    ProjectParticipant.status == "active",
+                )
+            )
+            participants = participants_result.scalars().all()
+            for p in participants:
+                agent_result = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
+                agent_obj = agent_result.scalar_one_or_none()
+                if agent_obj and agent_obj.owner_id:
+                    await manager.send_to_user(
+                        str(agent_obj.owner_id),
+                        {
+                            "type": "project_chat_message",
+                            "data": {
+                                "project_id": str(pid),
+                                "sender_name": sender_name,
+                                "content": req.content,
+                            }
+                        }
+                    )
+        except Exception:
+            pass
+
+        return ChatMessageResponse.model_validate(message)
+
+    async def list_chat_messages(self, project_id: str, limit: int = 50, offset: int = 0) -> ChatMessageListResponse:
+        """List chat messages for a project"""
+        result = await self.db.execute(
+            select(ProjectChatMessage).where(
+                ProjectChatMessage.project_id == UUID(project_id),
+            ).order_by(ProjectChatMessage.created_at).offset(offset).limit(limit)
+        )
+        messages = result.scalars().all()
+
+        count_result = await self.db.execute(
+            select(ProjectChatMessage).where(
+                ProjectChatMessage.project_id == UUID(project_id),
+            )
+        )
+        total = len(count_result.scalars().all())
+
+        return ChatMessageListResponse(
+            messages=[ChatMessageResponse.model_validate(m) for m in messages],
+            total=total,
+        )
+
+    # ---- Project TODO Methods ----
+
+    async def create_todo(self, project_id: str, req: TodoCreate, current_user) -> ProjectTodoResponse:
+        """Create a TODO - only leader can create"""
+        pid = UUID(project_id)
+        if not await self._is_leader_or_owner(pid, current_user):
+            raise ValueError("Only the project leader can create TODOs")
+
+        agent_id = await self._resolve_agent_id(current_user)
+
+        todo = ProjectTodo(
+            id=uuid4(),
+            project_id=pid,
+            title=req.title,
+            description=req.description,
+            priority=req.priority,
+            status="open",
+            created_by=agent_id,
+        )
+        self.db.add(todo)
+        await self.db.commit()
+        await self.db.refresh(todo)
+
+        # WebSocket push: notify all participants about new TODO
+        try:
+            participants_result = await self.db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == pid,
+                    ProjectParticipant.status == "active",
+                )
+            )
+            participants = participants_result.scalars().all()
+            for p in participants:
+                agent_result = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
+                agent_obj = agent_result.scalar_one_or_none()
+                if agent_obj and agent_obj.owner_id:
+                    await manager.send_to_user(
+                        str(agent_obj.owner_id),
+                        {
+                            "type": "project_todo_created",
+                            "data": {
+                                "project_id": str(pid),
+                                "todo_id": str(todo.id),
+                                "title": todo.title,
+                                "priority": todo.priority,
+                            }
+                        }
+                    )
+        except Exception:
+            pass
+
+        return ProjectTodoResponse.model_validate(todo)
+
+    async def list_todos(self, project_id: str) -> TodoListResponse:
+        """List TODOs for a project with claimer names"""
+        result = await self.db.execute(
+            select(ProjectTodo, Agent.name).join(
+                Agent, Agent.id == ProjectTodo.claimed_by, isouter=True
+            ).where(
+                ProjectTodo.project_id == UUID(project_id),
+            ).order_by(ProjectTodo.created_at)
+        )
+        rows = result.all()
+        todos = []
+        for todo, claimer_name in rows:
+            resp = ProjectTodoResponse.model_validate(todo)
+            resp.claimed_by_name = claimer_name
+            todos.append(resp)
+        return TodoListResponse(todos=todos, total=len(todos))
+
+    async def update_todo(self, project_id: str, todo_id: str, req: TodoUpdate, current_user) -> ProjectTodoResponse:
+        """Update a TODO - leader or claimer can update"""
+        pid = UUID(project_id)
+        tid = UUID(todo_id)
+
+        result = await self.db.execute(
+            select(ProjectTodo).where(ProjectTodo.id == tid, ProjectTodo.project_id == pid)
+        )
+        todo = result.scalar_one_or_none()
+        if not todo:
+            raise ValueError("TODO not found")
+
+        # Leader can always update; claimer can update status only
+        is_leader = await self._is_leader_or_owner(pid, current_user)
+        if not is_leader:
+            agent_id = await self._resolve_agent_id(current_user)
+            if todo.claimed_by != agent_id:
+                raise ValueError("Only the leader or the claimer can update this TODO")
+
+        update_data = req.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(todo, key, value)
+
+        await self.db.commit()
+        await self.db.refresh(todo)
+
+        resp = ProjectTodoResponse.model_validate(todo)
+        # Fetch claimer name if claimed
+        if todo.claimed_by:
+            claimer_result = await self.db.execute(select(Agent).where(Agent.id == todo.claimed_by))
+            claimer = claimer_result.scalar_one_or_none()
+            resp.claimed_by_name = claimer.name if claimer else None
+
+        return resp
+
+    async def claim_todo(self, project_id: str, todo_id: str, req: TodoClaimRequest, current_user) -> ProjectTodoResponse:
+        """Claim a TODO - any active participant can claim an open TODO"""
+        pid = UUID(project_id)
+        tid = UUID(todo_id)
+
+        result = await self.db.execute(
+            select(ProjectTodo).where(ProjectTodo.id == tid, ProjectTodo.project_id == pid)
+        )
+        todo = result.scalar_one_or_none()
+        if not todo:
+            raise ValueError("TODO not found")
+
+        if todo.status != "open":
+            raise ValueError(f"Cannot claim TODO with status '{todo.status}'")
+
+        # Verify claiming agent is an active participant
+        agent_id = req.agent_id
+        p_result = await self.db.execute(
+            select(ProjectParticipant).where(
+                ProjectParticipant.project_id == pid,
+                ProjectParticipant.agent_id == agent_id,
+                ProjectParticipant.status == "active",
+            )
+        )
+        if not p_result.scalar_one_or_none():
+            raise ValueError("Agent must be an active participant to claim a TODO")
+
+        todo.claimed_by = agent_id
+        todo.status = "claimed"
+        from datetime import datetime as dt
+        todo.claimed_at = dt.utcnow()
+
+        await self.db.commit()
+        await self.db.refresh(todo)
+
+        resp = ProjectTodoResponse.model_validate(todo)
+        claimer_result = await self.db.execute(select(Agent).where(Agent.id == agent_id))
+        claimer = claimer_result.scalar_one_or_none()
+        resp.claimed_by_name = claimer.name if claimer else None
+
+        # WebSocket push: notify all participants about TODO claimed
+        try:
+            participants_result = await self.db.execute(
+                select(ProjectParticipant).where(
+                    ProjectParticipant.project_id == pid,
+                    ProjectParticipant.status == "active",
+                )
+            )
+            participants = participants_result.scalars().all()
+            for p in participants:
+                agent_res = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
+                agent_obj = agent_res.scalar_one_or_none()
+                if agent_obj and agent_obj.owner_id:
+                    await manager.send_to_user(
+                        str(agent_obj.owner_id),
+                        {
+                            "type": "project_todo_claimed",
+                            "data": {
+                                "project_id": str(pid),
+                                "todo_id": str(tid),
+                                "claimed_by_name": resp.claimed_by_name,
+                            }
+                        }
+                    )
+        except Exception:
+            pass
+
+        return resp

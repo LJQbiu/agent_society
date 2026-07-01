@@ -465,6 +465,66 @@ export interface StatusTransitionRequest {
   new_status: "recruiting" | "active" | "suspended" | "completed" | "revoked";
 }
 
+// === Project Chat ===
+export interface ChatMessageCreate {
+  content: string;
+  sender_type: "human" | "agent";
+}
+
+export interface ChatMessageResponse {
+  id: string;
+  project_id: string;
+  sender_type: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  created_at: string;
+}
+
+export interface ChatMessageListResponse {
+  messages: ChatMessageResponse[];
+  total: number;
+}
+
+// === Project Todo ===
+export interface TodoCreate {
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+}
+
+export interface TodoUpdate {
+  title?: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  status?: "open" | "in_progress" | "completed" | "cancelled";
+}
+
+export interface TodoClaimRequest {
+  claimer_type: "human" | "agent";
+  agent_id?: string;
+}
+
+export interface ProjectTodoResponse {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  created_by: string;
+  claimed_by?: string;
+  claimed_by_name?: string;
+  claimed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TodoListResponse {
+  todos: ProjectTodoResponse[];
+  total: number;
+}
+
 // === Pagination (generic) ===
 export interface PaginatedResponse<T> {
   items: T[];

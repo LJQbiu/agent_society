@@ -12,6 +12,8 @@ import type {
   MyAgentsResponse,
   OrganizationCreateRequest, OrganizationUpdateRequest, OrganizationCRUDResponse, OrganizationCRUDListResponse, MemberListResponse,
   ProjectCreateRequest, ProjectUpdateRequest, ProjectCRUDResponse, ProjectCRUDListResponse, ParticipantListResponse, StatusTransitionRequest,
+  ChatMessageCreate, ChatMessageResponse, ChatMessageListResponse,
+  TodoCreate, TodoUpdate, TodoClaimRequest, ProjectTodoResponse, TodoListResponse,
   DashboardResponse, AdminListResponse, AdminDeleteResponse, PurgeResponse, DeleteAgentResponse, AuditLogResponse,
 } from "@/types";
 
@@ -233,6 +235,20 @@ class ApiClient {
       this.request<ParticipantListResponse>("GET", `/project/${projectId}/participants`),
     getMessages: (projectId: string, limit: number = 50) =>
       this.request<{ messages: any[]; total: number }>("GET", `/project/${projectId}/messages?limit=${limit}`),
+    // Chat
+    sendChatMessage: (projectId: string, data: ChatMessageCreate) =>
+      this.request<ChatMessageResponse>("POST", `/project/${projectId}/chat`, data),
+    listChatMessages: (projectId: string, limit: number = 50, offset: number = 0) =>
+      this.request<ChatMessageListResponse>("GET", `/project/${projectId}/chat?limit=${limit}&offset=${offset}`),
+    // Todo
+    createTodo: (projectId: string, data: TodoCreate) =>
+      this.request<ProjectTodoResponse>("POST", `/project/${projectId}/todos`, data),
+    listTodos: (projectId: string) =>
+      this.request<TodoListResponse>("GET", `/project/${projectId}/todos`),
+    updateTodo: (projectId: string, todoId: string, data: TodoUpdate) =>
+      this.request<ProjectTodoResponse>("PUT", `/project/${projectId}/todos/${todoId}`, data),
+    claimTodo: (projectId: string, todoId: string, data: TodoClaimRequest) =>
+      this.request<ProjectTodoResponse>("POST", `/project/${projectId}/todos/${todoId}/claim`, data),
   };
 
   // === A2A ===

@@ -8,6 +8,8 @@ import type {
   ProjectParticipantResponse, ParticipantListResponse,
   JoinProjectRequest, StatusTransitionRequest,
   MyAgentsResponse,
+  ChatMessageResponse, ChatMessageListResponse,
+  ProjectTodoResponse, TodoListResponse, TodoCreate, TodoUpdate,
 } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -27,6 +29,13 @@ export function ProjectManager() {
   const [selectedJoinAgent, setSelectedJoinAgent] = useState<string>("");
   const [messages, setMessages] = useState<any[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+
+  // Chat & Todo state
+  const [chatMessages, setChatMessages] = useState<ChatMessageResponse[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [todos, setTodos] = useState<ProjectTodoResponse[]>([]);
+  const [todoForm, setTodoForm] = useState<TodoCreate>({ title: "", description: "", priority: "medium" });
+  const [showTodoForm, setShowTodoForm] = useState(false);
 
   // Create form
   const [createForm, setCreateForm] = useState<ProjectCreateRequest>({
@@ -66,6 +75,77 @@ export function ProjectManager() {
 
   useEffect(() => { loadProjects(); api.identity.myAgents().then(r => setMyAgents(r)).catch(() => {}); }, [myOnly]);
 
+  // Poll chat & todo when viewing detail
+  useEffect(() => {
+    if (tab !== "detail" || !selectedProject) return;
+    const poll = async () => {
+      try {
+        const chatData = await api.projects.listChatMessages(selectedProject.id);
+        setChatMessages(chatData.messages || []);
+      } catch {}
+      try {
+        const todoData = await api.projects.listTodos(selectedProject.id);
+        setTodos(todoData.todos || []);
+      } catch {}
+    };
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, [tab, selectedProject?.id]);
+
+  // Send chat message
+  const handleSendChat = async () => {
+    if (!selectedProject || !chatInput.trim()) return;
+    try {
+      await api.projects.sendChatMessage(selectedProject.id, { content: chatInput.trim(), sender_type: "human" });
+      setChatInput("");
+      const chatData = await api.projects.listChatMessages(selectedProject.id);
+      setChatMessages(chatData.messages || []);
+    } catch (e: any) {
+      setError(e.message || "Failed to send message");
+    }
+  };
+
+  // Create todo (only leader)
+  const handleCreateTodo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject || !todoForm.title.trim()) return;
+    try {
+      await api.projects.createTodo(selectedProject.id, todoForm);
+      setTodoForm({ title: "", description: "", priority: "medium" });
+      setShowTodoForm(false);
+      const todoData = await api.projects.listTodos(selectedProject.id);
+      setTodos(todoData.todos || []);
+    } catch (e: any) {
+      setError(e.message || "Failed to create todo");
+    }
+  };
+
+  // Claim todo
+  const handleClaimTodo = async (todoId: string) => {
+    if (!selectedProject) return;
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    if (!agentId) { setError("请先选择一个Agent来认领此TODO"); return; }
+    try {
+      await api.projects.claimTodo(selectedProject.id, todoId, { agent_id: agentId, claimer_type: "agent" });
+      const todoData = await api.projects.listTodos(selectedProject.id);
+      setTodos(todoData.todos || []);
+    } catch (e: any) {
+      setError(e.message || "Failed to claim todo");
+    }
+  };
+
+  // Update todo status
+  const handleUpdateTodoStatus = async (todoId: string, status: "open" | "in_progress" | "completed" | "cancelled") => {
+    if (!selectedProject) return;
+    try {
+      await api.projects.updateTodo(selectedProject.id, todoId, { status });
+      const todoData = await api.projects.listTodos(selectedProject.id);
+      setTodos(todoData.todos || []);
+    } catch (e: any) {
+      setError(e.message || "Failed to update todo");
+    }
+  };
+
   // Create project
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +178,16 @@ export function ProjectManager() {
         setMessages(msgData.messages || []);
       } catch { setMessages([]); }
       setMessagesLoading(false);
+      // Load chat messages
+      try {
+        const chatData = await api.projects.listChatMessages(id);
+        setChatMessages(chatData.messages || []);
+      } catch { setChatMessages([]); }
+      // Load todos
+      try {
+        const todoData = await api.projects.listTodos(id);
+        setTodos(todoData.todos || []);
+      } catch { setTodos([]); }
       setTab("detail");
     } catch (e: any) {
       setError(e.message || "Failed to load project");
@@ -348,33 +438,117 @@ export function ProjectManager() {
             )}
           </div>
 
-          {/* Conversation Stream */}
-          <div className="bg-white p-4 rounded shadow">
-            <h3 className="font-bold mb-2">💬 Agent Conversation Stream</h3>
-            {messagesLoading ? <p className="text-gray-400">Loading messages...</p> : messages.length === 0 ? (
-              <p className="text-gray-400 italic">No A2A messages yet between project agents.</p>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {messages.map((msg, i) => (
-                  <div key={msg.message_id || i} className={`flex gap-2 p-2 rounded ${msg.from_agent_name === selectedProject?.name ? "bg-blue-50" : "bg-green-50"}`}>
-                    <div className="flex-shrink-0 w-24">
-                      <span className="font-semibold text-sm" title={msg.from_agent_id}>{msg.from_agent_name}</span>
-                      <svg className="inline w-3 h-3 mx-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                      <span className="font-semibold text-sm" title={msg.to_agent_id}>{msg.to_agent_name}</span>
+          {/* Chat & Todo Split Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Left: Chat Panel */}
+            <div className="bg-white p-4 rounded shadow">
+              <h3 className="font-bold mb-2">💬 Multi-Agent Chat</h3>
+              <div className="space-y-2 max-h-72 overflow-y-auto mb-3">
+                {chatMessages.length === 0 ? (
+                  <p className="text-gray-400 italic">No messages yet. Start a conversation!</p>
+                ) : chatMessages.map((msg) => (
+                  <div key={msg.id} className={`flex gap-2 p-2 rounded ${msg.sender_type === "human" ? "bg-blue-50" : "bg-green-50"}`}>
+                    <div className="flex-shrink-0">
+                      <span className={`font-semibold text-sm ${msg.sender_type === "human" ? "text-blue-600" : "text-green-600"}`}>
+                        {msg.sender_type === "human" ? "👤" : "🤖"} {msg.sender_name}
+                      </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm break-words">{msg.text || (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))}</p>
-                      <div className="flex gap-2 text-xs text-gray-400 mt-1">
-                        <span>{msg.message_type}</span>
-                        <span>{msg.priority}</span>
-                        <span>{msg.status}</span>
-                        {msg.created_at && <span>{new Date(msg.created_at).toLocaleString()}</span>}
-                      </div>
+                      <p className="text-sm break-words">{msg.content}</p>
+                      <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
+              {/* Chat Input */}
+              <div className="flex gap-2">
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); }}}
+                  placeholder="Type a message..."
+                  className="border p-2 rounded flex-1"
+                />
+                <button onClick={handleSendChat} className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">Send</button>
+              </div>
+            </div>
+
+            {/* Right: Todo Panel */}
+            <div className="bg-white p-4 rounded shadow">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold">📋 TODO List</h3>
+                {/* Leader can create todo */}
+                {selectedProject?.creator_id && myAgents?.agents?.some(a => a.id === selectedProject.creator_id) && (
+                  <button onClick={() => setShowTodoForm(!showTodoForm)} className="bg-purple-600 text-white px-2 py-1 rounded text-sm hover:bg-purple-700">
+                    + New TODO
+                  </button>
+                )}
+                {!selectedProject?.creator_id && (
+                  <button onClick={() => setShowTodoForm(!showTodoForm)} className="bg-purple-600 text-white px-2 py-1 rounded text-sm hover:bg-purple-700">
+                    + New TODO
+                  </button>
+                )}
+              </div>
+              {/* Todo Create Form */}
+              {showTodoForm && (
+                <form onSubmit={handleCreateTodo} className="bg-gray-50 p-3 rounded mb-3 space-y-2">
+                  <input value={todoForm.title} onChange={e => setTodoForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" className="border p-2 rounded w-full" required />
+                  <textarea value={todoForm.description} onChange={e => setTodoForm(f => ({ ...f, description: e.target.value }))} placeholder="Description" className="border p-2 rounded w-full" rows={2} />
+                  <select value={todoForm.priority} onChange={e => setTodoForm(f => ({ ...f, priority: e.target.value as "low" | "medium" | "high" | "critical" }))} className="border p-2 rounded">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="submit" className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700">Create</button>
+                    <button type="button" onClick={() => setShowTodoForm(false)} className="bg-gray-200 px-3 py-1 rounded">Cancel</button>
+                  </div>
+                </form>
+              )}
+              {/* Todo List */}
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {todos.length === 0 ? (
+                  <p className="text-gray-400 italic">No TODO items yet.</p>
+                ) : todos.map((todo) => (
+                  <div key={todo.id} className={`p-2 rounded border-l-4 ${todo.status === "completed" ? "border-green-500 bg-green-50" : todo.status === "in_progress" ? "border-yellow-500 bg-yellow-50" : todo.status === "claimed" ? "border-blue-500 bg-blue-50" : "border-gray-400 bg-gray-50"}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className={`font-semibold text-sm ${todo.priority === "critical" ? "text-red-600" : todo.priority === "high" ? "text-orange-600" : ""}`}>
+                          [{todo.priority}] {todo.title}
+                        </span>
+                        {todo.description && <p className="text-xs text-gray-500 mt-1">{todo.description}</p>}
+                      </div>
+                      <div className="flex gap-1">
+                        {todo.status === "pending" && (
+                          <button onClick={() => handleClaimTodo(todo.id)} className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Claim this TODO">
+                            🤝 Claim
+                          </button>
+                        )}
+                        {todo.status === "claimed" && (
+                          <button onClick={() => handleUpdateTodoStatus(todo.id, "in_progress")} className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600" title="Start working">
+                            ▶ Start
+                          </button>
+                        )}
+                        {todo.status === "in_progress" && (
+                          <button onClick={() => handleUpdateTodoStatus(todo.id, "completed")} className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600" title="Mark completed">
+                            ✅ Done
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {todo.claimed_by && (
+                      <div className="text-xs text-blue-500 mt-1">
+                        Claimed by: {todo.claimed_by_name || todo.claimed_by} {todo.claimed_at && `at ${new Date(todo.claimed_at).toLocaleString()}`}
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-400 mt-1">
+                      Created: {new Date(todo.created_at).toLocaleString()} · Status: {todo.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Update form */}
