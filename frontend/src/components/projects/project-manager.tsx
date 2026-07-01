@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type {
   ProjectCRUDResponse, ProjectCRUDListResponse,
@@ -440,37 +441,32 @@ export function ProjectManager() {
 
           {/* Chat & Todo Split Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Left: Chat Panel */}
+            {/* Left: Chat Preview + Link */}
             <div className="bg-white p-4 rounded shadow">
-              <h3 className="font-bold mb-2">💬 Multi-Agent Chat</h3>
-              <div className="space-y-2 max-h-72 overflow-y-auto mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold">💬 Multi-Agent Chat</h3>
+                <Link
+                  href={`/projects/${selectedProject.id}/chat`}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  进入完整Chat →
+                </Link>
+              </div>
+              <div className="space-y-2 max-h-32 overflow-y-auto mb-2">
                 {chatMessages.length === 0 ? (
                   <p className="text-gray-400 italic">No messages yet. Start a conversation!</p>
-                ) : chatMessages.map((msg) => (
-                  <div key={msg.id} className={`flex gap-2 p-2 rounded ${msg.sender_type === "human" ? "bg-blue-50" : "bg-green-50"}`}>
-                    <div className="flex-shrink-0">
-                      <span className={`font-semibold text-sm ${msg.sender_type === "human" ? "text-blue-600" : "text-green-600"}`}>
-                        {msg.sender_type === "human" ? "👤" : "🤖"} {msg.sender_name}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm break-words">{msg.content}</p>
-                      <span className="text-xs text-gray-400">{new Date(msg.created_at).toLocaleString()}</span>
-                    </div>
+                ) : chatMessages.slice(-3).map((msg) => (
+                  <div key={msg.id} className={`flex gap-1 p-1 rounded text-sm ${msg.sender_type === "human" ? "bg-blue-50" : "bg-green-50"}`}>
+                    <span className={`font-semibold ${msg.sender_type === "human" ? "text-blue-600" : "text-green-600"}`}>
+                      {msg.sender_type === "human" ? "👤" : "🤖"}{msg.sender_name}
+                    </span>
+                    <span className="text-gray-600 truncate flex-1">{msg.content.slice(0, 80)}...</span>
                   </div>
                 ))}
               </div>
-              {/* Chat Input */}
-              <div className="flex gap-2">
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); }}}
-                  placeholder="Type a message..."
-                  className="border p-2 rounded flex-1"
-                />
-                <button onClick={handleSendChat} className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">Send</button>
-              </div>
+              {chatMessages.length > 3 && (
+                <p className="text-xs text-gray-400 text-center">...还有 {chatMessages.length - 3} 条消息</p>
+              )}
             </div>
 
             {/* Right: Todo Panel */}

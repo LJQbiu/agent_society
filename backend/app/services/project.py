@@ -1,6 +1,7 @@
 """Project service - CRUD operations"""
 import asyncio
 import logging
+import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project, ProjectParticipant, ProjectChatMessage, ProjectTodo
@@ -809,6 +810,10 @@ async def _trigger_multi_agent_dialogue(project_id: str, rounds: int = 3):
                     except Exception as e:
                         _logger.error(f"LLM call failed for {agent.name}: {e}")
                         reply_text = f"[{agent.name}暂时无法回复]"
+
+                    # Strip any self-referencing prefix the LLM might add (e.g., "[KUAFU]:")
+                    reply_text = re.sub(rf'^\[{agent.name}\]\s*:\s*', '', reply_text)
+                    reply_text = re.sub(rf'^{agent.name}\s*:\s*', '', reply_text)
 
                     # Save agent's response as chat message
                     chat_msg = ProjectChatMessage(
