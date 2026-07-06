@@ -196,6 +196,16 @@ export interface MyAgentsResponse {
   }>;
 }
 
+export interface AgentStatusUpdateRequest {
+  status: "active" | "frozen" | "suspended" | "revoked";
+}
+
+export interface AgentStatusUpdateResponse {
+  agent_id: string;
+  status: string;
+  message: string;
+}
+
 // === A2A ===
 export interface AgentCard {
   agent_id: string;

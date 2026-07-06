@@ -248,13 +248,13 @@ export function ProjectManager() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6">
       <h1 className="text-2xl font-bold mb-4">Project Collaboration</h1>
 
       {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4">{error}</div>}
 
       {/* Tab buttons */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 flex-wrap">
         <button onClick={() => setTab("list")} className={tab === "list" ? "bg-blue-600 text-white px-4 py-2 rounded" : "bg-gray-200 px-4 py-2 rounded"}>
           Project List
         </button>
@@ -333,7 +333,7 @@ export function ProjectManager() {
             <label className="block font-medium mb-1">Description</label>
             <textarea value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} className="border p-2 rounded w-full" rows={3} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block font-medium mb-1">Type</label>
               <select value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))} className="border p-2 rounded w-full">
@@ -376,7 +376,7 @@ export function ProjectManager() {
           <div className="bg-white p-4 rounded shadow">
             <h2 className="text-xl font-bold">{selectedProject.name}</h2>
             <p className="text-gray-600 mt-1">{selectedProject.description || "No description"}</p>
-            <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3 text-sm">
               <div><span className="font-medium">Type:</span> {selectedProject.type || "-"}</div>
               <div><span className="font-medium">Status:</span> {selectedProject.status}</div>
               <div><span className="font-medium">Budget:</span> {selectedProject.budget || 0}</div>
@@ -384,7 +384,7 @@ export function ProjectManager() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <select
               value={selectedJoinAgent}
               onChange={e => setSelectedJoinAgent(e.target.value)}
@@ -413,13 +413,13 @@ export function ProjectManager() {
           <div className="bg-white p-4 rounded shadow">
             <h3 className="font-bold mb-2">Participants ({participants.length})</h3>
             {participants.length === 0 ? <p className="text-gray-500">No participants yet</p> : (
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-2">Agent</th>
-                    <th className="border p-2">Role</th>
-                    <th className="border p-2">Status</th>
-                    <th className="border p-2">Joined</th>
+              <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border p-2 text-left">Agent</th>
+                  <th className="border p-2 text-left hidden sm:table-cell">Role</th>
+                  <th className="border p-2 text-left">Status</th>
+                  <th className="border p-2 text-left hidden sm:table-cell">Joined</th>
                   </tr>
                 </thead>
                 <tbody>

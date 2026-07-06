@@ -203,6 +203,33 @@ body {
   .empty-state-icon {
     @apply w-16 h-16 rounded-2xl bg-surface-0 flex items-center justify-center text-2xl mb-4;
   }
+  /* === Markdown Content Overflow === */
+  .markdown-content {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    overflow: hidden;
+  }
+  .markdown-content pre {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .markdown-content code {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .markdown-content table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .markdown-content img {
+    max-width: 100%;
+    height: auto;
+  }
+  .markdown-content a {
+    overflow-wrap: break-word;
+    word-break: break-all;
+  }
 }
 
 /* ========== Toast Animations ========== */

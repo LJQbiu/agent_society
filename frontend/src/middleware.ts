@@ -6,15 +6,23 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/auth/login",
   "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
   "/docs",
   "/skills",
+  "/admin",
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/admin/login",
+  "/api/admin/logout",
+  "/api/admin/refresh",
   "/favicon.ico",
   "/favicon.svg",
   "/apple-touch-icon.svg",
   "/logo.svg",
-  "/api/auth/login",
-  "/api/auth/register",
-  "/api/auth/refresh",
 ];
 
 export function middleware(request: NextRequest) {

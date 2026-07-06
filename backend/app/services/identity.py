@@ -252,6 +252,44 @@ class IdentityService:
         else:
             raise ValueError(f"不支持的user_type: {user_type}")
 
+    async def update_agent_status(self, owner_id: str, agent_id: str, new_status: str) -> dict:
+        """更新agent状态 (active/frozen/suspended/revoked) - 叫停/恢复"""
+        VALID_STATUSES = {"active", "frozen", "suspended", "revoked"}
+        if new_status not in VALID_STATUSES:
+            raise ValueError(f"无效的状态值，允许: {VALID_STATUSES}")
+
+        result = await self.db.execute(
+            select(Agent).where(Agent.id == _safe_uuid(agent_id))
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise ValueError("Agent不存在")
+        if str(agent.owner_id) != str(_safe_uuid(owner_id)):
+            raise ValueError("只能修改自己的agent状态")
+
+        old_status = agent.status
+        agent.status = new_status
+        await self.db.commit()
+        await self.db.refresh(agent)
+
+        return {
+            "id": str(agent.id),
+            "name": agent.name,
+            "agent_id_str": agent.agent_id_str,
+            "status": agent.status,
+            "message": f"Agent '{agent.name}' 状态已从 {old_status} 更改为 {new_status}",
+        }
+
+    async def get_agent_status(self, agent_id: str) -> str:
+        """查询agent状态 - 用于bridge路由前检查"""
+        result = await self.db.execute(
+            select(Agent).where(Agent.id == _safe_uuid(agent_id))
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            return "unknown"
+        return agent.status
+
     async def delete_agent(self, owner_id: str, agent_id: str) -> dict:
         """用户删除自己的agent - 先清理所有关联记录"""
         from sqlalchemy import delete as sa_delete

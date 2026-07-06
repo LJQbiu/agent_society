@@ -1,13 +1,42 @@
 """WebSocket路由 — WS endpoint + 状态查询 + Chat"""
 import logging
+import httpx
 from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.utils.jwt import decode_token
 from app.services.ws_manager import manager
-from app.services.llm import chat_completion
+from app.database import async_session
+from app.models.agent import Agent
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
+
+# ─── Bridge routing: agent_id → bridge HTTP URL ───
+BRIDGE_URLS = {
+    "agent-jqagent-8d811ba0": "http://127.0.0.1:8001",
+    "agent-kuafu-e861fb3a": "http://127.0.0.1:8002",
+    "agent-nvwa-df28635b": "http://127.0.0.1:8003",
+}
+
+# ─── Agent status cache (for bridge gate) ───
+FROZEN_STATUSES = {"frozen", "suspended", "revoked"}
+
+
+async def _check_agent_status(agent_id_str: str) -> str:
+    """查询agent状态，用于bridge路由前检查。返回 'active'|'frozen'|'suspended'|'revoked'|'unknown'"""
+    async with async_session() as db:
+        # agent_id_str 格式如 "agent-jqagent-8d811ba0"
+        # 尝试从BRIDGE_URLS映射或直接查询
+        result = await db.execute(
+            select(Agent).where(Agent.agent_id_str == agent_id_str)
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            return "unknown"
+        return agent.status
+
 
 # ─── Chat conversation history (in-memory, per session) ───
 # key: ws connection → list of {role, content}
@@ -78,7 +107,7 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(...)):
 # === Chat WebSocket端点 ===
 @router.websocket("/ws/chat")
 async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
-    """Chat WS — 与Agent对话（LLM驱动）"""
+    """Chat WS — 与Agent对话（通过Bridge处理，支持工具调用）"""
     # 简化认证: 有token则验证, 无则用匿名
     user_id = "anonymous"
     agent_id = "agent-jqagent-8d811ba0"  # 默认JQAgent
@@ -114,35 +143,50 @@ async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
                 history = history[-_MAX_HISTORY:]
                 _chat_sessions[ws] = history
 
-            # 调用LLM
-            try:
-                reply = await chat_completion(
-                    agent_id=agent_id,
-                    messages=history,
-                )
-                # 追加助手回复
-                history.append({"role": "assistant", "content": reply})
-                if len(history) > _MAX_HISTORY:
-                    history = history[-_MAX_HISTORY:]
-                    _chat_sessions[ws] = history
-
-                await ws.send_json({
-                    "type": "reply",
-                    "content": reply,
-                    "agent_id": agent_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
-            except Exception as e:
-                err_type = type(e).__name__
-                err_msg = str(e)[:200] or "(empty)"
-                logger.error(f"Chat LLM error: [{err_type}] {err_msg}")
+            # ── Gate: check agent status before routing to bridge ──
+            agent_status = await _check_agent_status(agent_id)
+            if agent_status in FROZEN_STATUSES:
+                status_labels = {"frozen": "已冻结", "suspended": "已暂停", "revoked": "已撤销"}
+                reply = f"[Agent {agent_id} {status_labels.get(agent_status, agent_status)}，暂时无法回复]"
+                resp_agent_id = agent_id
+            # ── Route to bridge HTTP endpoint ──
+            elif bridge_url := BRIDGE_URLS.get(agent_id):
                 try:
-                    await ws.send_json({
-                        "type": "error",
-                        "content": f"Agent回复失败: {err_msg}",
-                    })
-                except Exception:
-                    pass
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        resp = await client.post(
+                            f"{bridge_url}/api/chat/completion",
+                            json={"messages": history, "agent_id": agent_id},
+                        )
+                        resp.raise_for_status()
+                        result = resp.json()
+                        reply = result.get("reply", "[Bridge返回空回复]")
+                        resp_agent_id = result.get("agent_id", agent_id)
+                except httpx.HTTPStatusError as e:
+                    err_msg = f"Bridge HTTP错误: {e.response.status_code}"
+                    logger.error(f"Chat bridge error: {err_msg}")
+                    reply = f"[Agent回复失败: {err_msg}]"
+                    resp_agent_id = agent_id
+                except Exception as e:
+                    err_msg = str(e)[:100]
+                    logger.error(f"Chat bridge call failed: {err_msg}")
+                    reply = f"[Agent回复失败: {err_msg}]"
+                    resp_agent_id = agent_id
+            else:
+                reply = f"[未知的Agent: {agent_id}]"
+                resp_agent_id = agent_id
+
+            # 追加助手回复
+            history.append({"role": "assistant", "content": reply})
+            if len(history) > _MAX_HISTORY:
+                history = history[-_MAX_HISTORY:]
+                _chat_sessions[ws] = history
+
+            await ws.send_json({
+                "type": "reply",
+                "content": reply,
+                "agent_id": resp_agent_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
     except WebSocketDisconnect:
         _chat_sessions.pop(ws, None)
     except Exception:

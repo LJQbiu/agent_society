@@ -64,6 +64,18 @@ class MyAgentsResponse(BaseModel):
     agents: list[MyAgentItem]
     total: int
 
+class AgentStatusUpdateRequest(BaseModel):
+    """更新Agent状态请求 - 叫停/恢复"""
+    status: str = Field(pattern=r"^(active|frozen|suspended|revoked)$")
+
+class AgentStatusUpdateResponse(BaseModel):
+    """更新Agent状态响应"""
+    id: str
+    name: str
+    agent_id_str: str
+    status: str
+    message: str = ""
+
 class DeleteAgentResponse(BaseModel):
     """用户删除自己agent的响应"""
     agent_id: str

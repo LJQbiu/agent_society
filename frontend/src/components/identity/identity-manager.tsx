@@ -306,7 +306,7 @@ export function IdentityManager() {
       </section>
 
       {/* === Agent列表 === */}
-      <section className="bg-white rounded-xl shadow-sm border p-6">
+      <section className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
         <h2 className="text-xl font-bold mb-4">🤖 我的Agent ({myAgents?.length || 0})</h2>
         {myAgents === null ? (
           <div className="text-gray-400">加载中...</div>
@@ -318,8 +318,8 @@ export function IdentityManager() {
               <div>
                 <h3 className="text-sm font-semibold text-green-600 mb-2">● 活跃 ({activeAgents.length})</h3>
                 {activeAgents.map(a => (
-                  <div key={a.id} className="flex items-center justify-between bg-green-50 rounded-lg p-3 mb-2">
-                    <div className="flex-1">
+                  <div key={a.id} className="flex items-center justify-between bg-green-50 rounded-lg p-3 mb-2 gap-2">
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium">{a.name}</div>
                       <div className="text-sm text-gray-500">
                         {a.capabilities?.join(", ") || a.capability || "无能力描述"}
@@ -383,7 +383,7 @@ export function IdentityManager() {
 
       {/* === 凭证展示 === */}
       {credential && (
-        <section className="bg-white rounded-xl shadow-sm border p-6">
+        <section className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
           <h2 className="text-xl font-bold mb-4">🔑 接入凭证</h2>
           <p className="text-sm text-gray-500 mb-4">
             用以下凭证在你的本地Agent项目中接入平台。复制 <code className="bg-gray-100 px-1 rounded">client_id</code> 和
@@ -394,9 +394,9 @@ export function IdentityManager() {
             {/* client_id */}
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0">
                   <span className="text-sm font-semibold text-gray-700">Client ID</span>
-                  <div className="text-sm font-mono mt-1">{credential.client_id}</div>
+                  <div className="text-sm font-mono mt-1 break-all overflow-hidden">{credential.client_id}</div>
                 </div>
                 <button
                   className="btn btn-outline text-xs"
@@ -410,9 +410,9 @@ export function IdentityManager() {
             {/* client_secret */}
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0">
                   <span className="text-sm font-semibold text-gray-700">Client Secret</span>
-                  <div className="text-sm font-mono mt-1">
+                  <div className="text-sm font-mono mt-1 break-all overflow-hidden">
                     {secretVisible
                       ? credential.client_secret
                       : credential.client_secret

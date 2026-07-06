@@ -9,7 +9,7 @@ import type {
   AgentCard, AgentCardUpdate, A2AMessage, A2AMessageSend, DiscoverResponse, MessageListResponse, PlatformAgentCard,
   MCPTool, MCPResource, MCPCallResult, MCPRpcResponse,
   TransferRequest, DepositRequest, BalanceResponse, TransactionListResponse,
-  MyAgentsResponse,
+  MyAgentsResponse, AgentStatusUpdateResponse,
   OrganizationCreateRequest, OrganizationUpdateRequest, OrganizationCRUDResponse, OrganizationCRUDListResponse, MemberListResponse,
   ProjectCreateRequest, ProjectUpdateRequest, ProjectCRUDResponse, ProjectCRUDListResponse, ParticipantListResponse, StatusTransitionRequest,
   ChatMessageCreate, ChatMessageResponse, ChatMessageListResponse,
@@ -31,12 +31,12 @@ function cleanParams(params: Record<string, any>): string {
 }
 
 class ApiClient {
-  /** 构造请求headers — httpOnly Cookie + Admin Bearer Token */
-  private getHeaders(hasBody: boolean = false): Record<string, string> {
+  /** 构造请求headers — httpOnly Cookie + Admin Bearer Token（仅admin路径） */
+  private getHeaders(path: string, hasBody: boolean = false): Record<string, string> {
     const headers: Record<string, string> = {};
-    // Admin token: stored in localStorage after /admin/login
+    // Admin token: 仅在/admin/路径下附加Authorization header，避免覆盖用户httpOnly Cookie认证
     const adminToken = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
-    if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+    if (adminToken && path.startsWith("/admin")) headers["Authorization"] = `Bearer ${adminToken}`;
     if (hasBody) headers["Content-Type"] = "application/json";
     return headers;
   }
@@ -77,7 +77,7 @@ class ApiClient {
     const hasBody = body !== undefined;
     const res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: this.getHeaders(hasBody),
+      headers: this.getHeaders(path, hasBody),
       body: hasBody ? JSON.stringify(body) : undefined,
       credentials: "include", // 关键：所有请求都携带httpOnly Cookie
     });
@@ -88,7 +88,7 @@ class ApiClient {
       if (refreshed) {
         const retryRes = await fetch(`${API_BASE}${path}`, {
           method,
-          headers: this.getHeaders(hasBody),
+          headers: this.getHeaders(path, hasBody),
           body: hasBody ? JSON.stringify(body) : undefined,
           credentials: "include",
         });
@@ -124,6 +124,8 @@ class ApiClient {
     myAgents: () => this.request<MyAgentsResponse>("GET", "/identity/my-agents"),
     deleteMyAgent: (agentId: string) =>
       this.request<DeleteAgentResponse>("DELETE", `/identity/my-agents/${agentId}`),
+    updateAgentStatus: (agentId: string, status: "active" | "frozen" | "suspended" | "revoked") =>
+      this.request<AgentStatusUpdateResponse>("PUT", `/identity/my-agents/${agentId}/status`, { status }),
   };
 
   // === Auth ===

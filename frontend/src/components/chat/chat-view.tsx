@@ -176,7 +176,7 @@ export function ChatView(): JSX.Element {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] max-w-3xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-64px)] sm:h-[calc(100vh-80px)] max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-3">
@@ -267,9 +267,9 @@ export function ChatView(): JSX.Element {
                         const isInline = !className;
                         return isInline
                           ? <code className="bg-gray-200 text-brand-700 px-1 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
-                          : <code className="block bg-gray-200 text-gray-800 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props}>{children}</code>;
+                          : <code className="block bg-gray-200 text-gray-800 p-3 rounded-lg text-xs font-mono overflow-x-auto max-w-full mb-2" {...props}>{children}</code>;
                       },
-                      pre: ({ children }) => <pre className="bg-gray-200 p-3 rounded-lg overflow-x-auto mb-2">{children}</pre>,
+                      pre: ({ children }) => <pre className="bg-gray-200 p-3 rounded-lg overflow-x-auto max-w-full mb-2">{children}</pre>,
                       blockquote: ({ children }) => <blockquote className="border-l-3 border-brand-400 pl-4 italic mb-2">{children}</blockquote>,
                       a: ({ href, children }) => <a href={href} className="text-brand-600 underline hover:text-brand-700" target="_blank" rel="noopener noreferrer">{children}</a>,
                       table: ({ children }) => <table className="w-full border-collapse mb-2">{children}</table>,

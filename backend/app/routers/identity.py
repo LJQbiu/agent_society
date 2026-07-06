@@ -82,6 +82,23 @@ async def update_my_profile(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
+@router.put("/my-agents/{agent_id}/status", response_model=AgentStatusUpdateResponse)
+async def update_agent_status(
+    agent_id: str,
+    data: AgentStatusUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """更新Agent状态 - 叫停(frozen/suspended)或恢复(active)"""
+    try:
+        owner_id = current_user.sub
+        return await IdentityService(db).update_agent_status(owner_id, agent_id, data.status)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "只能修改自己的" in str(e) else status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
 @router.delete("/my-agents/{agent_id}", response_model=DeleteAgentResponse)
 async def delete_my_agent(
     agent_id: str,

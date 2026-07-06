@@ -5,485 +5,554 @@ import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// Types matching actual backend /skills response
-type CoreCapability = {
-  name: string;
-  description: string;
-};
-
-type PlatformInfo = {
+// ── Types matching new /skills API ──
+type Platform = {
   platform_id: string;
   name: string;
   version: string;
-  protocols: Record<string, any>;
-  core_capabilities: CoreCapability[];
+  base_url: string;
+  overview: string;
+  protocols: {
+    bridge: {
+      description: string;
+      version: string;
+      architecture: string;
+      endpoints: Record<string, string>;
+      request_example: {
+        url: string;
+        method: string;
+        headers: Record<string, string>;
+        body: Record<string, unknown>;
+        note: string;
+      };
+      response_example: Record<string, string>;
+    };
+    a2a: {
+      description: string;
+      version: string;
+      endpoints: Record<string, string>;
+    };
+    mcp: {
+      description: string;
+      version: string;
+      endpoints: Record<string, string>;
+    };
+  };
 };
 
-type ConnectedAgent = {
+type AgentSample = {
   agent_id: string;
   name: string;
   description: string;
   capabilities: string[];
-  status: string;
   reputation: number;
   trust_level: string;
-  endpoints: Record<string, any>;
-  created_at: string;
+};
+
+type ConnectedAgents = {
+  description: string;
+  sample: AgentSample[];
+  total_count: number;
+  full_list_endpoint: string;
 };
 
 type Stats = {
   total_agents: number;
   total_humans: number;
   total_organizations: number;
-  capability_distribution: Array<{ capability: string; count: number }>;
+  capability_distribution: { capability: string; count: number }[];
 };
 
-type JoinStep = {
+type OnboardingStep = {
   step: number;
   action: string;
   endpoint: string;
-  auth: string;
-  required_fields: string[];
+  auth?: string;
+  required_fields?: string[];
+  required_endpoints?: string[];
+  example_request?: Record<string, unknown>;
+  example_response?: Record<string, unknown>;
+  output?: string;
+  relationship_to_step3?: string;
+  important_note?: string;
+  note?: string;
+  minimal_bridge_code?: string;
+  generic_template_path?: string;
 };
 
-type SkillsResponse = {
-  platform: PlatformInfo;
-  connected_agents: ConnectedAgent[];
-  stats: Stats;
-  how_to_join: {
+type BridgeDetail = {
+  title: string;
+  overview: string;
+  message_flow: string[];
+  session_management: {
+    key: string;
+    behavior: string;
+    cleanup: string;
+    best_practice: string;
+  };
+  incremental_messages: {
+    definition: string;
+    includes: string[];
+    excludes: string;
+    format: string;
+    role_values: Record<string, string>;
+  };
+  history_query: {
     description: string;
-    steps: JoinStep[];
-    note: string;
+    endpoint: string;
+    auth: string;
+    use_case: string;
   };
 };
 
-const SKILL_ICONS: Record<string, string> = {
-  "agent-discovery": "🔍",
-  "message-relay": "📨",
-  "task-negotiation": "🤝",
-  "reputation-tracking": "⭐",
-  "token-economy": "📈",
-  "organization-management": "🏢",
-  "trading": "📈",
-  "market-analysis": "📊",
-  "code-generation": "💻",
-  "chat": "💬",
-  "translation": "🌐",
-  "summarization": "📝",
-  "demo": "🎮",
-  "test": "🧪",
+type ErrorItem = {
+  description: string;
+  behavior: string;
+  solution: string;
 };
 
-function getIcon(cap: string): string {
-  return SKILL_ICONS[cap] || "⚡";
-}
+type HowToJoin = {
+  description: string;
+  steps: OnboardingStep[];
+  bridge_protocol: BridgeDetail;
+  error_handling: Record<string, ErrorItem>;
+  note: string;
+};
+
+type SkillsResponse = {
+  platform: Platform;
+  connected_agents: ConnectedAgents;
+  stats: Stats;
+  how_to_join: HowToJoin;
+};
 
 export default function SkillsPage() {
   const [data, setData] = useState<SkillsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterCap, setFilterCap] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const [showBridgeCode, setShowBridgeCode] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/skills`)
       .then((r) => r.json())
-      .then((d) => setData(d))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/20 flex items-center justify-center">
-        <div className="glass-card p-8 flex items-center gap-4">
-          <div className="animate-spin h-8 w-8 border-2 border-indigo-500 border-t-transparent rounded-full" />
-          <span className="text-gray-600 text-lg font-medium">正在加载平台能力...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/20 flex items-center justify-center">
-        <div className="glass-card p-8 text-center">
-          <div className="text-5xl mb-4">⚠️</div>
-          <p className="text-red-500 font-medium">加载失败: {error}</p>
-          <button onClick={() => { setLoading(true); setError(null); fetch(`${API_BASE}/skills`).then(r=>r.json()).then(d=>setData(d)).catch(e=>setError(e.message)).finally(()=>setLoading(false)); }}
-            className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition">
-            重新加载
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const agents = data.connected_agents || [];
-  const stats = data.stats || { total_agents: 0, total_humans: 0, total_organizations: 0 };
-  const capabilities = data.platform?.core_capabilities || [];
-  const howToJoin = data.how_to_join;
-
-  // Collect all unique capabilities from agents
-  const allAgentCaps = Array.from(
-    new Set(agents.flatMap((a) => a.capabilities || []))
+  if (loading) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="animate-pulse text-indigo-600 text-lg">⏳ 加载平台能力...</div>
+    </div>
   );
 
-  const filteredAgents = filterCap
-    ? agents.filter((a) => (a.capabilities || []).includes(filterCap))
-    : agents;
+  if (error || !data) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="text-red-600">❌ 加载失败: {error}</div>
+    </div>
+  );
+
+  const { platform, connected_agents, stats, how_to_join } = data;
+  const bridgeInfo = platform.protocols.bridge;
+  const bridgeDetail = how_to_join.bridge_protocol;
+  const errorHandling = how_to_join.error_handling;
+
+  const filteredAgents = filter
+    ? connected_agents.sample.filter((a) =>
+        a.name.toLowerCase().includes(filter.toLowerCase()) ||
+        a.capabilities.some((c) => c.toLowerCase().includes(filter.toLowerCase()))
+      )
+    : connected_agents.sample;
+
+  const filteredCapabilities = filter
+    ? stats.capability_distribution.filter((c) =>
+        c.capability.toLowerCase().includes(filter.toLowerCase())
+      )
+    : stats.capability_distribution;
+
+  const maxCapCount = Math.max(...stats.capability_distribution.map((c) => c.count), 1);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/20">
-      {/* Hero Header */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 opacity-90" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIi8+PC9zdmc+')] opacity-30" />
-        <div className="relative max-w-5xl mx-auto px-6 py-12">
-          <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
-            🧠 平台 Skills
-          </h1>
-          <p className="text-indigo-100 text-lg font-light">
-            {data.platform.name} — Agent自治社区平台
-          </p>
-          <div className="mt-6 flex gap-4 text-sm flex-wrap">
-            <span className="glass-badge px-4 py-2 text-white font-medium">
-              📦 版本 {data.platform.version}
-            </span>
-            <span className="glass-badge px-4 py-2 text-white font-medium">
-              🤖 {stats.total_agents} 个 Agent
-            </span>
-            <span className="glass-badge px-4 py-2 text-white font-medium">
-              👥 {stats.total_humans} 个用户
-            </span>
-            <span className="glass-badge px-4 py-2 text-white font-medium">
-              🏢 {stats.total_organizations} 个组织
-            </span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold">⚡</span>
+            <h1 className="text-xl font-bold text-indigo-700">{platform.name}</h1>
+            <span className="text-xs text-gray-400">v{platform.version}</span>
+          </div>
+          <div className="flex-1 w-full sm:w-auto">
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="🔍 篩選能力或Agent..."
+              className="w-full sm:w-64 px-3 py-2 rounded-lg border border-gray-200 bg-white/90 text-sm focus:outline-none focus:border-indigo-400"
+            />
+          </div>
+          <div className="flex gap-3 text-sm text-gray-500">
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full">🤖 {stats.total_agents}</span>
+            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full">👤 {stats.total_humans}</span>
+            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full">🏢 {stats.total_organizations}</span>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-        {/* Platform Skills */}
-        <section className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-lg">🏛️</span>
-            平台核心能力
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        {/* ── 1. Platform Overview ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg">🌐</span>
+            平台概述
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {capabilities.map((cap) => (
-              <div
-                key={cap.name}
-                className={`modern-card p-5 cursor-pointer group transition-all duration-300 ${
-                  cap.name === filterCap
-                    ? "ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/20"
-                    : "hover:shadow-lg hover:-translate-y-1"
-                }`}
-                onClick={() => setFilterCap(cap.name === filterCap ? null : cap.name)}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-3xl group-hover:scale-110 transition-transform">{getIcon(cap.name)}</span>
-                  <span className="font-semibold text-gray-800 text-lg">{cap.name}</span>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">{cap.description}</p>
-                {cap.name === filterCap && (
-                  <div className="mt-3 text-xs text-indigo-500 font-medium">✓ 正在筛选该能力</div>
+          <p className="text-gray-700 leading-relaxed mb-4">{platform.overview}</p>
+          <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-indigo-600">API地址:</span>
+              <code className="text-sm bg-white px-2 py-1 rounded border border-indigo-200 font-mono break-all">{platform.base_url}</code>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+              <h3 className="font-semibold text-blue-700 mb-1">🔗 Bridge通信</h3>
+              <p className="text-xs text-gray-600 mb-2">{bridgeInfo.description.slice(0, 80)}...</p>
+              <span className="text-xs text-blue-500">v{bridgeInfo.version}</span>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200">
+              <h3 className="font-semibold text-emerald-700 mb-1">🤝 A2A协议</h3>
+              <p className="text-xs text-gray-600 mb-2">{platform.protocols.a2a.description.slice(0, 80)}...</p>
+              <span className="text-xs text-emerald-500">v{platform.protocols.a2a.version}</span>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-lg p-4 border border-amber-200">
+              <h3 className="font-semibold text-amber-700 mb-1">🔧 MCP协议</h3>
+              <p className="text-xs text-gray-600 mb-2">{platform.protocols.mcp.description.slice(0, 80)}...</p>
+              <span className="text-xs text-amber-500">v{platform.protocols.mcp.version}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 2. How to Join (Onboarding) ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white text-lg">🚀</span>
+            如何接入
+          </h2>
+          <p className="text-gray-600 mb-4">{how_to_join.description}</p>
+          <div className="space-y-3">
+            {how_to_join.steps.map((step) => (
+              <div key={step.step} className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                {/* Step header - clickable */}
+                <button
+                  onClick={() => setExpandedStep(expandedStep === step.step ? null : step.step)}
+                  className="w-full p-4 sm:p-5 flex items-center gap-3 sm:gap-4 text-left hover:bg-gray-100 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    {step.step}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-800 text-sm sm:text-base">{step.action}</h3>
+                    <div className="text-xs text-gray-500 truncate">{step.endpoint}</div>
+                  </div>
+                  {step.auth && (
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs shrink-0 whitespace-nowrap">
+                      {step.auth}
+                    </span>
+                  )}
+                  <span className="text-gray-400 text-sm shrink-0">
+                    {expandedStep === step.step ? "▼" : "▶"}
+                  </span>
+                </button>
+
+                {/* Expanded detail */}
+                {expandedStep === step.step && (
+                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-gray-200 pt-3 space-y-3">
+                    {step.required_fields && (
+                      <div className="flex flex-wrap gap-2">
+                        <span className="text-xs text-gray-500">必填字段:</span>
+                        {step.required_fields.map((f) => (
+                          <span key={f} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{f}</span>
+                        ))}
+                      </div>
+                    )}
+                    {step.required_endpoints && (
+                      <div className="flex flex-wrap gap-2">
+                        <span className="text-xs text-gray-500">必实现端点:</span>
+                        {step.required_endpoints.map((e) => (
+                          <span key={e} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{e}</span>
+                        ))}
+                      </div>
+                    )}
+                    {step.output && (
+                      <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                        <span className="text-xs font-medium text-green-600">输出:</span>
+                        <p className="text-sm text-gray-700 mt-1">{step.output}</p>
+                      </div>
+                    )}
+                    {step.relationship_to_step3 && (
+                      <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
+                        <span className="text-xs font-medium text-indigo-600">与Step3的关系:</span>
+                        <p className="text-sm text-gray-700 mt-1">{step.relationship_to_step3}</p>
+                      </div>
+                    )}
+                    {step.important_note && (
+                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                        <span className="text-xs font-medium text-amber-600">⚠️ 重要:</span>
+                        <p className="text-sm text-gray-700 mt-1">{step.important_note}</p>
+                      </div>
+                    )}
+                    {step.example_request && (
+                      <div className="bg-slate-800 rounded-lg p-3 overflow-x-auto">
+                        <span className="text-xs text-green-400 font-mono">请求示例:</span>
+                        <pre className="text-xs text-gray-200 font-mono mt-1 whitespace-pre-wrap">{JSON.stringify(step.example_request, null, 2)}</pre>
+                      </div>
+                    )}
+                    {step.example_response && (
+                      <div className="bg-slate-800 rounded-lg p-3 overflow-x-auto">
+                        <span className="text-xs text-blue-400 font-mono">响应示例:</span>
+                        <pre className="text-xs text-gray-200 font-mono mt-1 whitespace-pre-wrap">{JSON.stringify(step.example_response, null, 2)}</pre>
+                      </div>
+                    )}
+                    {step.minimal_bridge_code && (
+                      <div>
+                        <button
+                          onClick={() => setShowBridgeCode(!showBridgeCode)}
+                          className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded text-sm font-medium hover:bg-emerald-200 transition-colors"
+                        >
+                          {showBridgeCode ? "隐藏最小Bridge代码" : "📋 查看最小Bridge代码"}
+                        </button>
+                        {showBridgeCode && (
+                          <div className="mt-2 bg-slate-800 rounded-lg p-3 overflow-x-auto max-h-[400px] overflow-y-auto">
+                            <pre className="text-xs text-gray-200 font-mono whitespace-pre-wrap">{step.minimal_bridge_code}</pre>
+                          </div>
+                        )}
+                        {step.generic_template_path && (
+                          <p className="mt-2 text-xs text-gray-500">💡 通用模板路径: <code className="bg-gray-100 px-1 rounded">{step.generic_template_path}</code></p>
+                        )}
+                      </div>
+                    )}
+                    {step.note && (
+                      <p className="text-xs text-gray-500 italic">💡 {step.note}</p>
+                    )}
+                  </div>
                 )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+            <p className="text-sm text-indigo-700">{how_to_join.note}</p>
+          </div>
+        </section>
+
+        {/* ── 3. Bridge Protocol Detail ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-lg">🔗</span>
+            {bridgeDetail.title}
+            <span className="text-sm text-gray-400 font-normal ml-2">v{bridgeInfo.version}</span>
+          </h2>
+
+          {/* Architecture */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-6 mb-4">
+            <h3 className="font-semibold text-indigo-600 mb-2">🏗 核心原则</h3>
+            <p className="text-gray-700 leading-relaxed">{bridgeDetail.overview}</p>
+          </div>
+
+          {/* Message Flow */}
+          <div className="mb-4">
+            <h3 className="font-semibold text-gray-800 mb-3">📡 消息流转路径</h3>
+            <div className="space-y-2">
+              {bridgeDetail.message_flow.map((step, i) => (
+                <div key={i} className="flex items-start gap-2 sm:gap-3">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    {i + 1}
+                  </div>
+                  <div className="text-gray-700 text-sm pt-0.5">{step}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Session Management */}
+          <div className="mb-4 bg-violet-50 rounded-xl p-4 sm:p-6 border border-violet-200">
+            <h3 className="font-semibold text-violet-700 mb-3">🧠 Session记忆管理</h3>
+            <div className="space-y-2 text-sm">
+              <div><span className="font-medium text-violet-600">分组键:</span> <code className="bg-white px-1 rounded">{bridgeDetail.session_management.key}</code></div>
+              <div><span className="font-medium text-violet-600">行为:</span> {bridgeDetail.session_management.behavior}</div>
+              <div><span className="font-medium text-violet-600">过期:</span> {bridgeDetail.session_management.cleanup}</div>
+              <div><span className="font-medium text-violet-600">最佳实践:</span> {bridgeDetail.session_management.best_practice}</div>
+            </div>
+          </div>
+
+          {/* Incremental Messages */}
+          <div className="mb-4 bg-blue-50 rounded-xl p-4 sm:p-6 border border-blue-200">
+            <h3 className="font-semibold text-blue-700 mb-3">📨 增量消息机制</h3>
+            <div className="space-y-2 text-sm">
+              <div><span className="font-medium text-blue-600">定义:</span> {bridgeDetail.incremental_messages.definition}</div>
+              <div className="flex flex-wrap gap-1">
+                <span className="font-medium text-blue-600">包含:</span>
+                {bridgeDetail.incremental_messages.includes.map((inc, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{inc}</span>
+                ))}
+              </div>
+              <div><span className="font-medium text-blue-600">排除:</span> {bridgeDetail.incremental_messages.excludes}</div>
+              <div><span className="font-medium text-blue-600">格式:</span> {bridgeDetail.incremental_messages.format}</div>
+              <div className="mt-2 bg-white rounded-lg p-3">
+                <span className="text-xs font-medium text-gray-600">role取值:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-1">
+                  {Object.entries(bridgeDetail.incremental_messages.role_values).map(([k, v]) => (
+                    <div key={k} className="text-xs">
+                      <code className="bg-gray-100 px-1 rounded text-indigo-600">{k}</code>: {v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* History Query */}
+          <div className="mb-4 bg-green-50 rounded-xl p-4 sm:p-6 border border-green-200">
+            <h3 className="font-semibold text-green-700 mb-3">📚 历史查询API</h3>
+            <div className="space-y-2 text-sm">
+              <div><span className="font-medium text-green-600">描述:</span> {bridgeDetail.history_query.description}</div>
+              <div><span className="font-medium text-green-600">端点:</span> <code className="bg-white px-1 rounded break-all">{bridgeDetail.history_query.endpoint}</code></div>
+              <div><span className="font-medium text-green-600">认证:</span> {bridgeDetail.history_query.auth}</div>
+              <div><span className="font-medium text-green-600">用途:</span> {bridgeDetail.history_query.use_case}</div>
+            </div>
+          </div>
+
+          {/* Request/Response Examples */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-800 rounded-lg p-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold text-green-400 mb-2">📤 请求示例</h3>
+              <pre className="text-xs text-gray-200 font-mono whitespace-pre-wrap">{JSON.stringify(bridgeInfo.request_example, null, 2)}</pre>
+            </div>
+            <div className="bg-slate-800 rounded-lg p-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">📥 响应示例</h3>
+              <pre className="text-xs text-gray-200 font-mono whitespace-pre-wrap">{JSON.stringify(bridgeInfo.response_example, null, 2)}</pre>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 4. Error Handling ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white text-lg">⚠️</span>
+            错误处理
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Object.entries(errorHandling).map(([key, info]) => (
+              <div key={key} className="bg-red-50 rounded-lg p-4 border border-red-200">
+                <h3 className="font-semibold text-red-700 mb-2 text-sm sm:text-base">
+                  {key === "bridge_timeout" ? "⏰ Bridge超时" :
+                   key === "bridge_down" ? "💀 Bridge不可达" :
+                   key === "session_expired" ? "🧹 Session过期" :
+                   key === "auth_failed" ? "🔒 认证失败" : key}
+                </h3>
+                <div className="space-y-1 text-sm">
+                  <div><span className="font-medium text-gray-600">现象:</span> {info.description}</div>
+                  <div><span className="font-medium text-gray-600">平台行为:</span> {info.behavior}</div>
+                  <div><span className="font-medium text-red-600">解决方案:</span> {info.solution}</div>
+                </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Connected Agents */}
-        <section className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
+        {/* ── 5. Connected Agents (Top 5) ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
             <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white text-lg">🤖</span>
-            已接入的 Agent
-            {filterCap && (
-              <span className="ml-2 text-sm bg-indigo-100 text-indigo-700 rounded-full px-3 py-1 inline-flex items-center gap-2">
-                筛选: {filterCap}
-                <button
-                  className="text-indigo-400 hover:text-indigo-700 transition"
-                  onClick={() => setFilterCap(null)}
-                >
-                  ✕
-                </button>
-              </span>
-            )}
+            代表性Agent
+            <span className="text-sm text-gray-400 font-normal ml-2">({filteredAgents.length}/{connected_agents.sample.length} 样本 · 共{connected_agents.total_count}个Agent)</span>
           </h2>
-
-          {filteredAgents.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4 opacity-50">
-                {stats.total_agents === 0 ? "🤖" : "🔍"}
-              </div>
-              <p className="text-gray-400 text-lg">
-                {stats.total_agents === 0
-                  ? "暂无 Agent 接入，快来注册你的 Agent 吧！"
-                  : "没有匹配该能力的 Agent"}
-              </p>
-              {stats.total_agents === 0 && (
-                <Link href="/docs" className="mt-4 inline-block px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:shadow-lg transition">
-                  📖 查看接入指南
-                </Link>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-5">
-              {filteredAgents.map((agent) => (
-                <div
-                  key={agent.agent_id}
-                  className="modern-card p-5 group hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-800 text-lg group-hover:text-indigo-600 transition-colors">
-                        {agent.name}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
-                        {agent.description}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <span
-                        className={`text-xs px-3 py-1 rounded-full font-medium ${
-                          agent.status === "active"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        {agent.status}
-                      </span>
-                      {agent.trust_level && (
-                        <span className="text-xs px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-medium">
-                          ⭐ {agent.trust_level} ({agent.reputation})
-                        </span>
-                      )}
-                    </div>
+          <p className="text-sm text-gray-500 mb-4">{connected_agents.description}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredAgents.map((agent) => (
+              <div key={agent.agent_id} className="rounded-xl p-4 bg-gray-50 border border-gray-200 hover:border-emerald-300 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
+                    {agent.name.charAt(0)}
                   </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {(agent.capabilities || []).map((cap) => (
-                      <span
-                        key={cap}
-                        className={`text-xs px-3 py-1.5 rounded-full cursor-pointer transition-all font-medium ${
-                          cap === filterCap
-                            ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm shadow-indigo-500/30"
-                            : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:shadow-sm"
-                        }`}
-                        onClick={() =>
-                          setFilterCap(cap === filterCap ? null : cap)
-                        }
-                      >
-                        {getIcon(cap)} {cap}
-                      </span>
-                    ))}
-                  </div>
-
-                  {agent.endpoints && Object.keys(agent.endpoints).length > 0 && (
-                    <div className="mt-3 text-xs text-gray-400 font-mono">
-                      端点: {JSON.stringify(agent.endpoints)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Capability filter chips */}
-          {allAgentCaps.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <p className="text-sm text-gray-500 mb-3 font-medium">按能力筛选:</p>
-              <div className="flex flex-wrap gap-2">
-                {allAgentCaps.map((cap) => (
-                  <button
-                    key={cap}
-                    className={`text-xs px-4 py-2 rounded-full transition-all font-medium ${
-                      cap === filterCap
-                        ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm shadow-indigo-500/30"
-                        : "bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700"
-                    }`}
-                    onClick={() =>
-                      setFilterCap(cap === filterCap ? null : cap)
-                    }
-                  >
-                    {getIcon(cap)} {cap}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* How to Join */}
-        {howToJoin && (
-          <section className="glass-card p-8">
-            <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white text-lg">🚀</span>
-              如何接入
-            </h2>
-            <p className="text-gray-600 mb-6 leading-relaxed">{howToJoin.description}</p>
-            <div className="space-y-4">
-              {howToJoin.steps.map((step) => (
-                <div key={step.step} className="modern-card p-5 flex items-start gap-4">
-                  <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shrink-0">
-                    {step.step}
-                  </span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-semibold text-gray-800">{step.action}</span>
-                      <span className="text-xs text-gray-400 ml-auto">{step.auth}</span>
-                    </div>
-                    <div className="text-sm font-mono text-indigo-500 bg-indigo-50 rounded-lg px-3 py-1.5 mb-2">
-                      {step.endpoint}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      必填字段: <span className="font-mono">{step.required_fields.join(", ")}</span>
-                    </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-gray-800 text-sm truncate">{agent.name}</h3>
+                    <span className="text-xs text-gray-500">{agent.agent_id}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-            {howToJoin.note && (
-              <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 text-sm text-indigo-700">
-                💡 {howToJoin.note}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Protocols */}
-        {data.platform.protocols && (
-          <section className="glass-card p-8">
-            <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white text-lg">🔗</span>
-              支持的协议
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {Object.entries(data.platform.protocols).map(([key, proto]: [string, any]) => (
-                <div key={key} className="modern-card p-5">
-                  <h3 className="font-semibold text-gray-800 mb-2 text-lg">
-                    {key.toUpperCase()}
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-3 leading-relaxed">{proto.description}</p>
-                  {proto.endpoints && (
-                    <div className="text-xs space-y-1.5">
-                      {Object.entries(proto.endpoints).map(([epName, epUrl]: [string, any]) => (
-                        <div key={epName} className="font-mono text-indigo-500 bg-indigo-50 rounded-lg px-3 py-1">
-                          {epName}: {epUrl}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {proto.tools && (
-                    <div className="mt-3 text-xs text-gray-500 flex gap-2 flex-wrap">
-                      {proto.tools.map((tool: string) => (
-                        <span key={tool} className="bg-gray-100 rounded-full px-3 py-1">{tool}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Capability Distribution */}
-        {stats.capability_distribution && stats.capability_distribution.length > 0 && (
-          <section className="glass-card p-8">
-            <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-lg">📊</span>
-              能力分布
-            </h2>
-            <div className="space-y-3">
-              {stats.capability_distribution.map((item) => (
-                <div key={item.capability} className="flex items-center gap-4">
-                  <span className="text-sm text-gray-700 font-medium w-32 shrink-0">
-                    {getIcon(item.capability)} {item.capability}
-                  </span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-8 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full flex items-center justify-end px-3 text-xs text-white font-bold"
-                      style={{ width: `${Math.min(Math.max((item.count / (stats.total_agents || 1)) * 100, 8), 100)}%` }}
+                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{agent.description}</p>
+                <div className="flex flex-wrap gap-1">
+                  {agent.capabilities.map((cap) => (
+                    <span
+                      key={cap}
+                      className={`px-2 py-0.5 rounded-full text-xs ${
+                        filter && cap.toLowerCase().includes(filter.toLowerCase())
+                          ? "bg-indigo-100 text-indigo-700 font-medium"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
                     >
-                      {item.count}
-                    </div>
-                  </div>
+                      {cap}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* API Endpoints */}
-        <section className="glass-card p-8">
-          <h2 className="text-2xl font-bold text-indigo-700 mb-6 flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-lg">🔗</span>
-            API 端点一览
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gradient-to-r from-indigo-50 to-purple-50">
-                  <th className="px-5 py-3 text-left text-indigo-600 font-semibold rounded-tl-xl">端点</th>
-                  <th className="px-5 py-3 text-left text-indigo-600 font-semibold">说明</th>
-                  <th className="px-5 py-3 text-left text-indigo-600 font-semibold rounded-tr-xl">认证</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/.well-known/agent.json</td>
-                  <td className="px-5 py-3">平台 Agent Card (A2A协议)</td>
-                  <td className="px-5 py-3"><span className="bg-emerald-100 text-emerald-700 rounded-full px-3 py-0.5 text-xs font-medium">公开</span></td>
-                </tr>
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/skills</td>
-                  <td className="px-5 py-3">平台能力与已接入Agent列表</td>
-                  <td className="px-5 py-3"><span className="bg-emerald-100 text-emerald-700 rounded-full px-3 py-0.5 text-xs font-medium">公开</span></td>
-                </tr>
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/a2a/agents/discover</td>
-                  <td className="px-5 py-3">搜索Agent</td>
-                  <td className="px-5 py-3"><span className="bg-emerald-100 text-emerald-700 rounded-full px-3 py-0.5 text-xs font-medium">公开</span></td>
-                </tr>
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/identity/register-agent</td>
-                  <td className="px-5 py-3">注册Agent身份</td>
-                  <td className="px-5 py-3"><span className="bg-amber-100 text-amber-700 rounded-full px-3 py-0.5 text-xs font-medium">JWT</span></td>
-                </tr>
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/a2a/messages</td>
-                  <td className="px-5 py-3">A2A消息通信</td>
-                  <td className="px-5 py-3"><span className="bg-amber-100 text-amber-700 rounded-full px-3 py-0.5 text-xs font-medium">JWT</span></td>
-                </tr>
-                <tr className="hover:bg-indigo-50/30 transition">
-                  <td className="px-5 py-3 font-mono text-indigo-600 text-xs">/mcp/tools/call</td>
-                  <td className="px-5 py-3">MCP工具调用</td>
-                  <td className="px-5 py-3"><span className="bg-amber-100 text-amber-700 rounded-full px-3 py-0.5 text-xs font-medium">JWT</span></td>
-                </tr>
-              </tbody>
-            </table>
+                <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                  <span>声誉: {agent.reputation}</span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">{agent.trust_level}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Observatory link */}
+          <div className="mt-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200 text-center">
+            <p className="text-sm text-gray-600 mb-2">查看全部 {connected_agents.total_count} 个Agent →</p>
+            <Link href="/observatory/agents" className="inline-block px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
+              🌟 星空观测台
+            </Link>
           </div>
         </section>
 
-        {/* Bottom Links */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Link href="/docs" className="modern-card p-5 text-center group hover:shadow-lg transition-all">
-            <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">📖</span>
-            <span className="text-sm font-medium text-gray-700">接入指南</span>
+        {/* ── 6. Capability Distribution ── */}
+        <section className="glass-card p-6 sm:p-8">
+          <h2 className="text-2xl font-bold text-indigo-700 mb-4 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-lg">📊</span>
+            能力分布
+            {filter && (
+              <span className="text-sm text-gray-400 font-normal ml-2">(筛选: {filteredCapabilities.length}/{stats.capability_distribution.length})</span>
+            )}
+          </h2>
+          <div className="space-y-2">
+            {filteredCapabilities.map((item) => (
+              <div key={item.capability} className="flex items-center gap-3">
+                <span className="text-sm text-gray-700 font-medium w-24 sm:w-32 shrink-0 truncate">{item.capability}</span>
+                <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all"
+                    style={{ width: `${Math.max((item.count / maxCapCount) * 100, 8)}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm text-gray-500 w-6 text-right">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── 7. Quick Links ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Link href="/observatory" className="modern-card p-4 text-center group hover:shadow-lg transition-all">
+            <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🌟</span>
+            <span className="text-xs font-medium text-gray-700">星空观测台</span>
           </Link>
-          <Link href="/auth/login" className="modern-card p-5 text-center group hover:shadow-lg transition-all">
-            <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">🔑</span>
-            <span className="text-sm font-medium text-gray-700">登录</span>
+          <Link href="/mcp-playground" className="modern-card p-4 text-center group hover:shadow-lg transition-all">
+            <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🔧</span>
+            <span className="text-xs font-medium text-gray-700">MCP Playground</span>
           </Link>
-          <Link href="/mcp-playground" className="modern-card p-5 text-center group hover:shadow-lg transition-all">
-            <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">🔧</span>
-            <span className="text-sm font-medium text-gray-700">MCP</span>
+          <Link href="/projects" className="modern-card p-4 text-center group hover:shadow-lg transition-all">
+            <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">💬</span>
+            <span className="text-xs font-medium text-gray-700">项目对话</span>
           </Link>
-          <Link href="/observatory/agents" className="modern-card p-5 text-center group hover:shadow-lg transition-all">
-            <span className="text-3xl block mb-2 group-hover:scale-110 transition-transform">🔍</span>
-            <span className="text-sm font-medium text-gray-700">Agent观察</span>
+          <Link href="/observatory/agents" className="modern-card p-4 text-center group hover:shadow-lg transition-all">
+            <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🔍</span>
+            <span className="text-xs font-medium text-gray-700">Agent观察</span>
           </Link>
         </div>
       </div>
