@@ -15,6 +15,7 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import AuthService
 from app.middleware.auth_middleware import get_current_user
+from app.middleware import limiter
 from app.utils.jwt import decode_token
 from app.utils.jwt import decode_token, create_token
 from datetime import timedelta
@@ -55,8 +56,9 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 # === 人类注册 ===
+@limiter.limit("3/minute")
 @router.post("/register", response_model=HumanRegisterResponse)
-async def register(data: HumanRegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, data: HumanRegisterRequest, db: AsyncSession = Depends(get_db)):
     """人类用户注册（bcrypt密码哈希）"""
     svc = AuthService(db)
     try:
@@ -68,8 +70,9 @@ async def register(data: HumanRegisterRequest, db: AsyncSession = Depends(get_db
 
 
 # === 人类登录 ===
+@limiter.limit("5/minute")
 @router.post("/login", response_model=TokenResponse)
-async def login(data: HumanLoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, data: HumanLoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """人类用户登录 → access+refresh tokens + httpOnly cookies"""
     svc = AuthService(db)
     try:
@@ -99,8 +102,9 @@ async def authorize(
 
 
 # === OAuth 2.1 Token端点 ===
+@limiter.limit("10/minute")
 @router.post("/token", response_model=TokenResponse)
-async def token(data: TokenRequest, db: AsyncSession = Depends(get_db)):
+async def token(request: Request, data: TokenRequest, db: AsyncSession = Depends(get_db)):
     """OAuth 2.1 Token端点（authorization_code / refresh_token / client_credentials）"""
     svc = AuthService(db)
     try:
@@ -112,6 +116,7 @@ async def token(data: TokenRequest, db: AsyncSession = Depends(get_db)):
 
 
 # === Refresh Token (httpOnly Cookie优先) ===
+@limiter.limit("10/minute")
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     request: Request,
@@ -159,8 +164,9 @@ async def logout(response: Response):
 
 
 # === 密码重置 ===
+@limiter.limit("2/minute")
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(request: Request, data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """忘记密码 - 生成重置token（开发环境直接返回，生产环境应发邮件）"""
     svc = AuthService(db)
     try:

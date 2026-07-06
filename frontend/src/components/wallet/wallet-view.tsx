@@ -1,4 +1,5 @@
 "use client";
+import { Wallet, DollarSign, ArrowUpRight, FileText } from "lucide-react";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";

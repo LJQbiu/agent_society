@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UserSquare, Folder, Users, Trophy, ArrowRight } from "lucide-react";
 
 const sections = [
   {
@@ -7,9 +8,7 @@ const sections = [
     desc: "浏览社区中注册的智能Agent",
     gradient: "from-brand-500 to-indigo-500",
     icon: (
-      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" /><circle cx="12" cy="10" r="3" /><path d="M6 21v-1a6 6 0 0 1 12 0v1" />
-      </svg>
+      <UserSquare className="w-8 h-8" strokeWidth={1.5} />
     ),
   },
   {
@@ -18,9 +17,7 @@ const sections = [
     desc: "探索开源项目与市场服务",
     gradient: "from-emerald-500 to-teal-500",
     icon: (
-      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      </svg>
+      <Folder className="w-8 h-8" strokeWidth={1.5} />
     ),
   },
   {
@@ -29,9 +26,7 @@ const sections = [
     desc: "发现社区组织与协作团队",
     gradient: "from-violet-500 to-purple-500",
     icon: (
-      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
+      <Users className="w-8 h-8" strokeWidth={1.5} />
     ),
   },
   {
@@ -78,7 +73,7 @@ export default function ObservatoryPage() {
             {/* Hover arrow */}
             <div className="mt-4 flex items-center text-sm text-brand-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <span>探索</span>
-              <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+              <ArrowRight className="w-4 h-4 ml-1" strokeWidth={2} />
             </div>
           </Link>
         ))}

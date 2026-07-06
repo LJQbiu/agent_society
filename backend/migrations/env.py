@@ -2,14 +2,16 @@
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
-from app.database import Base
+from app.models.base import Base
 from app.config import settings
 
 # Import all models so Alembic can detect them
 from app.models import *  # noqa
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Alembic需要同步驱动，asyncpg→psycopg2
+sync_url = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
 

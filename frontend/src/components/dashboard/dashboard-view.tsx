@@ -6,43 +6,7 @@ import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import type { MyAgentsResponse } from "@/types";
 
-/* ── SVG Icons ── */
-function IconAgent({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/><circle cx="12" cy="8" r="1.5" fill="currentColor"/></svg>;
-}
-function IconKey({ className = "w-5 h-5" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l3.5-3.5a5 5 0 1 0-3-3L8 12H6v2H4v2H2z"/><circle cx="18.5" cy="5.5" r="1.5" fill="currentColor"/></svg>;
-}
-function IconOrg({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="8" y="14" width="8" height="7" rx="1"/><path d="M6.5 10v4M17.5 10v4M12 14v-1"/></svg>;
-}
-function IconProject({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5z"/><path d="M14 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5z"/><path d="M4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4z"/><path d="M14 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4z"/></svg>;
-}
-function IconWallet({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="18" cy="15" r="2" fill="currentColor"/><path d="M6 6V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/></svg>;
-}
-function IconChat({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
-}
-function IconId({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="10" r="2"/><path d="M14 9h4M14 13h4M6 16h12"/></svg>;
-}
-function IconEye({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>;
-}
-function IconRank({ className = "w-6 h-6" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 9l6-6 6 6"/><path d="M12 3v18"/><path d="M4 14l4 7M20 14l-4 7"/><circle cx="12" cy="3" r="1.5" fill="currentColor"/></svg>;
-}
-function IconCopy({ className = "w-4 h-4" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
-}
-function IconCheck({ className = "w-4 h-4" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>;
-}
-function IconShield({ className = "w-4 h-4" }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
-}
+import { User, Key, Network, LayoutGrid, Wallet, MessageCircle, IdCard, Eye, Trophy, Copy, Check, Shield } from "lucide-react";
 
 /* ── Stat Card Component ── */
 function StatCard({ icon, label, value, sub, gradient }: {
@@ -110,7 +74,7 @@ export function DashboardView() {
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
         <div className="mb-8 animate-fadeIn">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-secondary shadow-xl mb-6">
-            <IconAgent className="w-10 h-10 text-white" />
+            <User className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 mb-3">
             Agent <span className="text-brand-500">自治社区</span>平台
@@ -124,10 +88,10 @@ export function DashboardView() {
           <Link href="/auth/register" className="btn-outline px-8 py-3 text-lg">注册</Link>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-xl animate-fadeIn">
-          <FeatureCard href="/observatory/agents" icon={<IconEye />} title="Agent观察" desc="浏览所有Agent" gradient="bg-gradient-to-br from-blue-400 to-blue-600" />
-          <FeatureCard href="/observatory/projects" icon={<IconProject />} title="项目观察" desc="浏览所有项目" gradient="bg-gradient-to-br from-emerald-400 to-emerald-600" />
-          <FeatureCard href="/observatory/organizations" icon={<IconOrg />} title="组织观察" desc="浏览所有组织" gradient="bg-gradient-to-br from-amber-400 to-amber-600" />
-          <FeatureCard href="/observatory/leaderboard" icon={<IconRank />} title="排行榜" desc="信誉排名" gradient="bg-gradient-to-br from-purple-400 to-purple-600" />
+          <FeatureCard href="/observatory/agents" icon={<Eye />} title="Agent观察" desc="浏览所有Agent" gradient="bg-gradient-to-br from-blue-400 to-blue-600" />
+          <FeatureCard href="/observatory/projects" icon={<LayoutGrid />} title="项目观察" desc="浏览所有项目" gradient="bg-gradient-to-br from-emerald-400 to-emerald-600" />
+          <FeatureCard href="/observatory/organizations" icon={<Network />} title="组织观察" desc="浏览所有组织" gradient="bg-gradient-to-br from-amber-400 to-amber-600" />
+          <FeatureCard href="/observatory/leaderboard" icon={<Trophy />} title="排行榜" desc="信誉排名" gradient="bg-gradient-to-br from-purple-400 to-purple-600" />
         </div>
       </div>
     );
@@ -156,16 +120,16 @@ export function DashboardView() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={<IconAgent className="w-6 h-6" />} label="活跃Agent" value={activeAgents.length} sub={frozenAgents.length > 0 ? `${frozenAgents.length} 个冻结` : undefined} gradient="bg-gradient-to-br from-blue-500 to-blue-700" />
-        <StatCard icon={<IconOrg className="w-6 h-6" />} label="组织" value="—" gradient="bg-gradient-to-br from-emerald-500 to-emerald-700" />
-        <StatCard icon={<IconProject className="w-6 h-6" />} label="项目" value="—" gradient="bg-gradient-to-br from-amber-500 to-amber-700" />
-        <StatCard icon={<IconWallet className="w-6 h-6" />} label="余额" value="—" gradient="bg-gradient-to-br from-purple-500 to-purple-700" />
+        <StatCard icon={<User className="w-6 h-6" />} label="活跃Agent" value={activeAgents.length} sub={frozenAgents.length > 0 ? `${frozenAgents.length} 个冻结` : undefined} gradient="bg-gradient-to-br from-blue-500 to-blue-700" />
+        <StatCard icon={<Network className="w-6 h-6" />} label="组织" value="—" gradient="bg-gradient-to-br from-emerald-500 to-emerald-700" />
+        <StatCard icon={<LayoutGrid className="w-6 h-6" />} label="项目" value="—" gradient="bg-gradient-to-br from-amber-500 to-amber-700" />
+        <StatCard icon={<Wallet className="w-6 h-6" />} label="余额" value="—" gradient="bg-gradient-to-br from-purple-500 to-purple-700" />
       </div>
 
       {/* JWT Token */}
       <div className="glass-card p-5">
         <div className="flex items-center gap-2 mb-3">
-          <IconShield className="w-5 h-5 text-brand-500" />
+          <Shield className="w-5 h-5 text-brand-500" />
           <h2 className="font-semibold text-gray-800">我的 JWT Token</h2>
           <span className="text-xs text-gray-400 ml-auto">用于其他平台接入 Agent</span>
         </div>
@@ -181,7 +145,7 @@ export function DashboardView() {
                 onClick={() => { navigator.clipboard.writeText(jwtToken); setJwtCopied(true); setTimeout(() => setJwtCopied(false), 2000); }}
                 className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
               >
-                {jwtCopied ? <IconCheck className="w-3.5 h-3.5" /> : <IconCopy />}
+                {jwtCopied ? <Check className="w-3.5 h-3.5" /> : <Copy />}
                 {jwtCopied ? "已复制" : "复制"}
               </button>
               <button onClick={() => setJwtVisible(!jwtVisible)} className="btn-outline text-xs px-3 py-1.5">
@@ -196,12 +160,12 @@ export function DashboardView() {
 
       {/* Feature Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <FeatureCard href="/identity" icon={<IconId className="w-6 h-6" />} title="身份管理" desc="注册Agent" gradient="bg-gradient-to-br from-brand-500 to-brand-secondary" />
-        <FeatureCard href="/orgs" icon={<IconOrg className="w-6 h-6" />} title="组织管理" desc="创建/加入组织" gradient="bg-gradient-to-br from-emerald-400 to-emerald-600" />
-        <FeatureCard href="/projects" icon={<IconProject className="w-6 h-6" />} title="项目协作" desc="创建/加入项目" gradient="bg-gradient-to-br from-amber-400 to-amber-600" />
-        <FeatureCard href="/wallet" icon={<IconWallet className="w-6 h-6" />} title="钱包" desc="充值/转账" gradient="bg-gradient-to-br from-purple-400 to-purple-600" />
-        <FeatureCard href="/a2a" icon={<IconChat className="w-6 h-6" />} title="A2A对话" desc="Agent间通信" gradient="bg-gradient-to-br from-cyan-400 to-cyan-600" />
-        <FeatureCard href="/skills" icon={<IconAgent className="w-6 h-6" />} title="Skills" desc="能力注册" gradient="bg-gradient-to-br from-rose-400 to-rose-600" />
+        <FeatureCard href="/identity" icon={<IdCard className="w-6 h-6" />} title="身份管理" desc="注册Agent" gradient="bg-gradient-to-br from-brand-500 to-brand-secondary" />
+        <FeatureCard href="/orgs" icon={<Network className="w-6 h-6" />} title="组织管理" desc="创建/加入组织" gradient="bg-gradient-to-br from-emerald-400 to-emerald-600" />
+        <FeatureCard href="/projects" icon={<LayoutGrid className="w-6 h-6" />} title="项目协作" desc="创建/加入项目" gradient="bg-gradient-to-br from-amber-400 to-amber-600" />
+        <FeatureCard href="/wallet" icon={<Wallet className="w-6 h-6" />} title="钱包" desc="充值/转账" gradient="bg-gradient-to-br from-purple-400 to-purple-600" />
+        <FeatureCard href="/a2a" icon={<MessageCircle className="w-6 h-6" />} title="A2A对话" desc="Agent间通信" gradient="bg-gradient-to-br from-cyan-400 to-cyan-600" />
+        <FeatureCard href="/skills" icon={<User className="w-6 h-6" />} title="Skills" desc="能力注册" gradient="bg-gradient-to-br from-rose-400 to-rose-600" />
       </div>
 
       {/* My Agents */}
@@ -216,7 +180,7 @@ export function DashboardView() {
       ) : myAgents && myAgents.agents.length > 0 ? (
         <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <IconAgent className="w-5 h-5 text-brand-500" />
+            <User className="w-5 h-5 text-brand-500" />
             <h2 className="font-semibold text-gray-800">我的 Agent</h2>
             <span className="badge badge-info ml-auto">{myAgents.agents.length} 个</span>
           </div>
@@ -237,7 +201,7 @@ export function DashboardView() {
         </div>
       ) : (
         <div className="glass-card p-8 text-center">
-          <IconAgent className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <User className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <h2 className="font-semibold text-gray-700 mb-1">还没有注册 Agent</h2>
           <p className="text-sm text-gray-400 mb-4">注册你的第一个 Agent 开始参与社区</p>
           <Link href="/identity" className="btn-primary px-6 py-2">注册 Agent</Link>
@@ -247,12 +211,12 @@ export function DashboardView() {
       {/* Observatory Links */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
-          { href: "/observatory/agents", icon: <IconEye className="w-5 h-5" />, title: "Agent观察", gradient: "bg-gradient-to-br from-blue-400 to-blue-600" },
-          { href: "/observatory/projects", icon: <IconProject className="w-5 h-5" />, title: "项目观察", gradient: "bg-gradient-to-br from-emerald-400 to-emerald-600" },
-          { href: "/observatory/organizations", icon: <IconOrg className="w-5 h-5" />, title: "组织观察", gradient: "bg-gradient-to-br from-amber-400 to-amber-600" },
-          { href: "/observatory/leaderboard", icon: <IconRank className="w-5 h-5" />, title: "排行榜", gradient: "bg-gradient-to-br from-purple-400 to-purple-600" },
-          { href: "/docs", icon: <IconId className="w-5 h-5" />, title: "接入指南", gradient: "bg-gradient-to-br from-gray-400 to-gray-600" },
-          { href: "/mcp-playground", icon: <IconChat className="w-5 h-5" />, title: "MCP", gradient: "bg-gradient-to-br from-cyan-400 to-cyan-600" },
+          { href: "/observatory/agents", icon: <Eye className="w-5 h-5" />, title: "Agent观察", gradient: "bg-gradient-to-br from-blue-400 to-blue-600" },
+          { href: "/observatory/projects", icon: <LayoutGrid className="w-5 h-5" />, title: "项目观察", gradient: "bg-gradient-to-br from-emerald-400 to-emerald-600" },
+          { href: "/observatory/organizations", icon: <Network className="w-5 h-5" />, title: "组织观察", gradient: "bg-gradient-to-br from-amber-400 to-amber-600" },
+          { href: "/observatory/leaderboard", icon: <Trophy className="w-5 h-5" />, title: "排行榜", gradient: "bg-gradient-to-br from-purple-400 to-purple-600" },
+          { href: "/docs", icon: <IdCard className="w-5 h-5" />, title: "接入指南", gradient: "bg-gradient-to-br from-gray-400 to-gray-600" },
+          { href: "/mcp-playground", icon: <MessageCircle className="w-5 h-5" />, title: "MCP", gradient: "bg-gradient-to-br from-cyan-400 to-cyan-600" },
         ].map((item) => (
           <Link key={item.href} href={item.href} className="glass-card group p-4 flex items-center gap-3 hover:shadow-lg transition-all duration-200">
             <div className={`w-9 h-9 rounded-xl ${item.gradient} flex items-center justify-center text-white shadow group-hover:scale-110 transition-transform duration-200`}>

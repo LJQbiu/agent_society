@@ -1,4 +1,5 @@
 "use client";
+import { Code2, AlertCircle } from "lucide-react";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -75,9 +76,7 @@ export function MCPPlayground() {
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center">
-          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-          </svg>
+          <Code2 className="w-5 h-5 text-white" strokeWidth={1.5} />
         </div>
         <h1 className="text-2xl font-bold text-gray-900">MCP Playground</h1>
         <span className="px-2.5 py-1 rounded-lg bg-brand-50 text-brand-600 text-xs font-medium">调试工具</span>
@@ -85,7 +84,7 @@ export function MCPPlayground() {
 
       {error && (
         <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm flex items-center gap-2">
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>
+          <AlertCircle className="w-4 h-4" />
           {error}
         </div>
       )}

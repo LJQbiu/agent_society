@@ -1,4 +1,5 @@
 "use client";
+import { Folder, Star, FolderOpen } from "lucide-react";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -17,9 +18,7 @@ export function ProjectDirectory() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white shadow-md">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
+          <Folder className="w-5 h-5" strokeWidth={1.5} />
         </div>
         <div>
           <h2 className="text-xl font-bold text-gray-900">项目市场</h2>

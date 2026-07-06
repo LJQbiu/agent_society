@@ -1,47 +1,67 @@
-"""WebSocket路由 — WS endpoint + 状态查询 + Chat"""
+"""WebSocket路由 — WS endpoint + 状态查询 + Chat (DB-backed)"""
 import logging
+import uuid
 import httpx
 from datetime import datetime, timezone
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.jwt import decode_token
 from app.services.ws_manager import manager
 from app.database import async_session
 from app.models.agent import Agent
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
-
-# ─── Bridge routing: agent_id → bridge HTTP URL ───
-BRIDGE_URLS = {
-    "agent-jqagent-8d811ba0": "http://127.0.0.1:8001",
-    "agent-kuafu-e861fb3a": "http://127.0.0.1:8002",
-    "agent-nvwa-df28635b": "http://127.0.0.1:8003",
-}
 
 # ─── Agent status cache (for bridge gate) ───
 FROZEN_STATUSES = {"frozen", "suspended", "revoked"}
 
 
-async def _check_agent_status(agent_id_str: str) -> str:
-    """查询agent状态，用于bridge路由前检查。返回 'active'|'frozen'|'suspended'|'revoked'|'unknown'"""
+async def _get_agent_info(agent_id_str: str) -> tuple[str | None, str]:
+    """查询agent状态和bridge_url。返回 (bridge_url, status)"""
     async with async_session() as db:
-        # agent_id_str 格式如 "agent-jqagent-8d811ba0"
-        # 尝试从BRIDGE_URLS映射或直接查询
         result = await db.execute(
             select(Agent).where(Agent.agent_id_str == agent_id_str)
         )
         agent = result.scalar_one_or_none()
         if not agent:
-            return "unknown"
-        return agent.status
+            return None, "unknown"
+        return agent.bridge_url, agent.status
 
 
-# ─── Chat conversation history (in-memory, per session) ───
-# key: ws connection → list of {role, content}
-_chat_sessions: dict = {}
-_MAX_HISTORY = 20  # keep last N messages per session
+async def _save_chat(session_id: str, agent_id_str: str, user_id: str | None,
+                     role: str, content: str, extra: dict | None = None):
+    """持久化一条chat消息到DB"""
+    async with async_session() as db:
+        msg = ChatMessage(
+            session_id=session_id,
+            agent_id_str=agent_id_str,
+            user_id=user_id or "anonymous",
+            role=role,
+            content=content,
+            extra=extra,
+        )
+        db.add(msg)
+        await db.commit()
+
+
+async def _load_chat_history(session_id: str, limit: int = 20) -> list[dict]:
+    """从DB加载指定session的最近N条chat历史"""
+    async with async_session() as db:
+        result = await db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(limit)
+        )
+        messages = result.scalars().all()
+        # 按时间升序返回
+        return [
+            {"role": m.role, "content": m.content, "timestamp": m.created_at.isoformat()}
+            for m in reversed(messages)
+        ]
 
 
 # === WebSocket连接端点 ===
@@ -107,23 +127,36 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query(...)):
 # === Chat WebSocket端点 ===
 @router.websocket("/ws/chat")
 async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
-    """Chat WS — 与Agent对话（通过Bridge处理，支持工具调用）"""
+    """Chat WS — 与Agent对话（通过Bridge处理，支持工具调用，DB持久化）"""
     # 简化认证: 有token则验证, 无则用匿名
     user_id = "anonymous"
-    agent_id = "agent-jqagent-8d811ba0"  # 默认JQAgent
+    agent_id = None  # 由客户端指定或DB查找首个active agent
+    session_id = str(uuid.uuid4())  # 每次WS连接一个session
+
     if token:
         payload = decode_token(token)
         if payload:
             user_id = payload.get("sub", "anonymous")
 
     await ws.accept()
-    _chat_sessions[ws] = []
+
+    # 加载已有历史（如果客户端提供session_id则恢复，否则新session）
+    history = await _load_chat_history(session_id)
 
     await ws.send_json({
         "type": "connected",
+        "session_id": session_id,
         "agent_id": agent_id,
         "message": "Chat连接已建立",
     })
+
+    # 如果有历史，发送给客户端恢复
+    if history:
+        await ws.send_json({
+            "type": "history",
+            "messages": history,
+            "session_id": session_id,
+        })
 
     try:
         while True:
@@ -136,21 +169,33 @@ async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
             if "agent_id" in data:
                 agent_id = data["agent_id"]
 
-            # 追加用户消息到历史
-            history = _chat_sessions[ws]
+            # 如果仍未指定agent_id，尝试DB查找首个有bridge_url的active agent
+            if not agent_id:
+                async with async_session() as db:
+                    result = await db.execute(
+                        select(Agent)
+                        .where(Agent.status == "active", Agent.bridge_url.isnot(None))
+                        .limit(1)
+                    )
+                    default_agent = result.scalar_one_or_none()
+                    if default_agent:
+                        agent_id = default_agent.agent_id_str
+                    else:
+                        await ws.send_json({"type": "error", "message": "No available agent"})
+                        continue
+
+            # 追加用户消息到内存历史 + 持久化到DB
             history.append({"role": "user", "content": text})
-            if len(history) > _MAX_HISTORY:
-                history = history[-_MAX_HISTORY:]
-                _chat_sessions[ws] = history
+            await _save_chat(session_id, agent_id, user_id, "user", text)
 
             # ── Gate: check agent status before routing to bridge ──
-            agent_status = await _check_agent_status(agent_id)
+            bridge_url, agent_status = await _get_agent_info(agent_id)
             if agent_status in FROZEN_STATUSES:
                 status_labels = {"frozen": "已冻结", "suspended": "已暂停", "revoked": "已撤销"}
                 reply = f"[Agent {agent_id} {status_labels.get(agent_status, agent_status)}，暂时无法回复]"
                 resp_agent_id = agent_id
             # ── Route to bridge HTTP endpoint ──
-            elif bridge_url := BRIDGE_URLS.get(agent_id):
+            elif bridge_url:
                 try:
                     async with httpx.AsyncClient(timeout=120.0) as client:
                         resp = await client.post(
@@ -172,25 +217,35 @@ async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
                     reply = f"[Agent回复失败: {err_msg}]"
                     resp_agent_id = agent_id
             else:
-                reply = f"[未知的Agent: {agent_id}]"
+                reply = f"[未知的Agent或无bridge_url: {agent_id}]"
                 resp_agent_id = agent_id
 
-            # 追加助手回复
+            # 追加助手回复到内存历史 + 持久化到DB
             history.append({"role": "assistant", "content": reply})
-            if len(history) > _MAX_HISTORY:
-                history = history[-_MAX_HISTORY:]
-                _chat_sessions[ws] = history
+            # Keep in-memory history bounded
+            if len(history) > 40:
+                history = history[-40:]
+            await _save_chat(session_id, agent_id, user_id, "assistant", reply)
 
             await ws.send_json({
                 "type": "reply",
                 "content": reply,
                 "agent_id": resp_agent_id,
+                "session_id": session_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
     except WebSocketDisconnect:
-        _chat_sessions.pop(ws, None)
+        logger.info(f"Chat WS disconnected: session={session_id}")
     except Exception:
-        _chat_sessions.pop(ws, None)
+        logger.error(f"Chat WS error: session={session_id}")
+
+
+# === Chat历史查询端点 ===
+@router.get("/ws/chat/history")
+async def chat_history(session_id: str = Query(...), limit: int = Query(50)):
+    """查询指定session的chat历史（REST端点，便于前端恢复对话）"""
+    messages = await _load_chat_history(session_id, limit)
+    return {"session_id": session_id, "messages": messages, "count": len(messages)}
 
 
 # === WS状态查询端点 ===

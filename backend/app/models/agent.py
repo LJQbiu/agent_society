@@ -20,6 +20,7 @@ class Agent(Base, UUIDMixin, TimestampMixin):
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     task_count: Mapped[int] = mapped_column(Integer, default=0)
     agent_card: Mapped[dict] = mapped_column(JSONB, default=dict)
+    bridge_url: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)  # Bridge HTTP URL for WS chat
     
     owner = relationship("Human", back_populates="agents")
     projects = relationship("ProjectParticipant", back_populates="agent")

@@ -5,6 +5,24 @@ import { useAuth } from "@/hooks/use-auth";
 import { NotificationBadge } from "@/components/common/notification-badge";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import {
+  Bot as IconAgent,
+  Folder as IconProject,
+  Sun as IconOrg,
+  Trophy as IconTrophy,
+  CreditCard as IconWallet,
+  MessageCircle as IconChat,
+  UserCircle as IconId,
+  BookOpen as IconBook,
+  Brain as IconBrain,
+  Plug2 as IconPlug,
+  Menu as IconMenu,
+  X as IconClose,
+  LogOut as IconLogout,
+  ChevronDown as IconChevron,
+  Search as IconSearch,
+  Shield as IconShield,
+} from "lucide-react";
 
 /* ─── SVG Icon Components ─── */
 function LogoAS({ className = "w-9 h-9" }) {
@@ -38,131 +56,6 @@ function LogoAS({ className = "w-9 h-9" }) {
       <circle cx="352" cy="340" r="14" fill="url(#logoNode)" opacity="0.8" />
       <circle cx="256" cy="400" r="18" fill="url(#logoNode)" opacity="0.9" />
       <text x="256" y="292" fontFamily="Arial,Helvetica,sans-serif" fontSize="72" fontWeight="bold" fill="#ffffff" textAnchor="middle" letterSpacing="-2">AS</text>
-    </svg>
-  );
-}
-function IconAgent({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a3 3 0 00-3 3v1a3 3 0 006 0V5a3 3 0 00-3-3z" />
-      <path d="M12 8c-4 0-7 2-7 5v3h14v-3c0-3-3-5-7-5z" />
-      <circle cx="9" cy="14" r="1" fill="currentColor" />
-      <circle cx="15" cy="14" r="1" fill="currentColor" />
-      <path d="M9 17c1.5 1 4.5 1 6 0" />
-    </svg>
-  );
-}
-function IconProject({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-    </svg>
-  );
-}
-function IconOrg({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
-    </svg>
-  );
-}
-function IconTrophy({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9H4.5a2.5 2.5 0 010-5H6" />
-      <path d="M18 9h1.5a2.5 2.5 0 000-5H18" />
-      <path d="M4 22h16" />
-      <path d="M18 2H6v7a6 6 0 0012 0V2z" />
-    </svg>
-  );
-}
-function IconWallet({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="6" width="20" height="14" rx="2" />
-      <path d="M16 14h2" /><path d="M2 10h20" />
-    </svg>
-  );
-}
-function IconChat({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-    </svg>
-  );
-}
-function IconId({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 10-16 0" />
-    </svg>
-  );
-}
-function IconBook({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-    </svg>
-  );
-}
-function IconBrain({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a8 8 0 018 8c0 3.6-2 6.7-5 8.3V21a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2.7C6 16.7 4 13.6 4 10a8 8 0 018-8z" />
-      <path d="M10 18v2M14 18v2" /><path d="M9 10h.01M15 10h.01" />
-    </svg>
-  );
-}
-function IconPlug({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v6M12 18v4M6 8h12M8 18h8M12 8v10" />
-      <circle cx="12" cy="8" r="2" /><circle cx="12" cy="18" r="2" />
-    </svg>
-  );
-}
-function IconMenu({ className = "w-6 h-6" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
-  );
-}
-function IconClose({ className = "w-6 h-6" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-function IconLogout({ className = "w-4 h-4" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-      <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  );
-}
-function IconChevron({ className = "w-4 h-4" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9l6 6 6-6" />
-    </svg>
-  );
-}
-function IconSearch({ className = "w-4 h-4" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
-}
-function IconShield({ className = "w-5 h-5" }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }

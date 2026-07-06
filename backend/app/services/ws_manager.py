@@ -21,6 +21,16 @@ class ConnectionManager:
         """启动心跳检测，定期发送ping并清理无响应连接"""
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(interval))
 
+    async def stop_heartbeat(self):
+        """停止心跳检测（shutdown时调用）"""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
+
     async def _heartbeat_loop(self, interval: int):
         while True:
             await asyncio.sleep(interval)

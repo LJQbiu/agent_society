@@ -7,6 +7,7 @@ from app.models.project import Project, ProjectParticipant, ProjectChatMessage, 
 from app.models.transaction import Transaction
 from app.models.governance import GovernanceEvent, Admin, OAuthClient, AuthorizationCode, RefreshToken
 from app.models.a2a import Message, AgentCardVersion, Task
+from app.models.chat import ChatMessage
 
 __all__ = [
     "Base", "UUIDMixin", "TimestampMixin",
@@ -14,4 +15,5 @@ __all__ = [
     "Project", "ProjectParticipant", "ProjectChatMessage", "ProjectTodo", "Transaction",
     "GovernanceEvent", "Admin", "OAuthClient", "AuthorizationCode", "RefreshToken",
     "Message", "AgentCardVersion", "Task",
+    "ChatMessage",
 ]

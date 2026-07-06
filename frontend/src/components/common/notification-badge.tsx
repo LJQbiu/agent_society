@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { wsClient, type WSEventType } from "@/lib/ws";
 import { useAuth } from "@/hooks/use-auth";
+import { Bell } from "lucide-react";
 
 interface NotificationBadgeProps {
   /** 自定义事件类型过滤 */
@@ -55,19 +56,7 @@ export function NotificationBadge({
       title="通知"
     >
       {/* 铃铛图标 */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="w-5 h-5 text-gray-600"
-      >
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-      </svg>
+      <Bell className="w-5 h-5 text-gray-600" />
       {/* 未读计数badge */}
       {unread > 0 && (
         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">

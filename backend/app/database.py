@@ -27,7 +27,7 @@ async def init_db():
         await conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         await conn.run_sync(Base.metadata.create_all)
     
-    # Seed default super_admin if none exists
+    # Seed default super_admin only if none exists (don't reset on every startup)
     import bcrypt
     from app.models.governance import Admin
     async with async_session() as session:
@@ -35,18 +35,9 @@ async def init_db():
             sa.select(Admin).where(Admin.role == "super_admin")
         )
         existing = result.scalar_one_or_none()
-        default_password = "Admin123!@#"
-        if existing:
-            # Reset credentials to known defaults so admin login always works
-            existing.password_hash = bcrypt.hashpw(
-                default_password.encode(), bcrypt.gensalt()
-            ).decode()
-            existing.username = "super_admin"
-            existing.email = "admin@agent-society.local"
-            existing.is_active = True
-            await session.commit()
-        else:
-            # Create default super_admin
+        if not existing:
+            # Create default super_admin (first-time only)
+            default_password = "Admin123!@#"
             admin = Admin(
                 username="super_admin",
                 email="admin@agent-society.local",

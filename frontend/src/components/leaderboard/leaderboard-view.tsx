@@ -1,4 +1,5 @@
 "use client";
+import { Trophy } from "lucide-react";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";

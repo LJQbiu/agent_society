@@ -1,4 +1,5 @@
 "use client";
+import { CheckCircle } from "lucide-react";
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -60,9 +61,7 @@ export function ResetPasswordForm() {
         <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
           <div className="text-center">
             <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckCircle className="w-6 h-6 text-green-600" strokeWidth={2} />
             </div>
             <h2 className="text-2xl font-bold text-gray-900">密码重置成功！</h2>
             <p className="mt-2 text-sm text-gray-600">

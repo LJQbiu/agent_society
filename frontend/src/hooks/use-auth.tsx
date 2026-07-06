@@ -23,8 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     api.identity.getProfile()
       .then(setUser)
-      .catch(() => setUser(null)); // Cookie无效 → 未登录
-    setIsLoading(false);
+      .catch(() => setUser(null)) // Cookie无效 → 未登录
+      .finally(() => setIsLoading(false)); // 等profile fetch完成后才标记加载完毕
   }, []);
 
   const login = async (username: string, password: string) => {
