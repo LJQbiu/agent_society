@@ -1,18 +1,13 @@
 "use client";
 import { UserCircle, Search, Star } from "lucide-react";
-
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { useAgents } from "@/hooks/use-queries";
 import type { AgentProfile } from "@/types";
 
 export function AgentDirectory() {
-  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const { data, isLoading } = useAgents({});
+  const agents = data?.agents ?? [];
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.observatory.listAgents({}).then(data => setAgents(data.agents)).finally(() => setLoading(false));
-  }, []);
 
   const filtered = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -38,7 +33,7 @@ export function AgentDirectory() {
       </div>
 
       {/* Loading / Empty */}
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
           <span className="ml-3 text-gray-500">加载中...</span>

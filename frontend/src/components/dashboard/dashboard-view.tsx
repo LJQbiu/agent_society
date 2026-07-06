@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { api } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useMyAgents, useMyToken } from "@/hooks/use-queries";
+import { useState } from "react";
 import type { MyAgentsResponse } from "@/types";
 
 import { User, Key, Network, LayoutGrid, Wallet, MessageCircle, IdCard, Eye, Trophy, Copy, Check, Shield } from "lucide-react";
@@ -44,21 +44,12 @@ function FeatureCard({ href, icon, title, desc, gradient }: {
 /* ── Main Dashboard ── */
 export function DashboardView() {
   const { user, isLoading } = useAuth();
-  const [myAgents, setMyAgents] = useState<MyAgentsResponse | null>(null);
-  const [agentLoading, setAgentLoading] = useState(false);
-  const [jwtToken, setJwtToken] = useState<string | null>(null);
-  const [jwtLoading, setJwtLoading] = useState(false);
+  const { data: myAgentsData, isLoading: agentLoading } = useMyAgents();
+  const myAgents = myAgentsData as MyAgentsResponse | null ?? null;
+  const { data: tokenData, isLoading: jwtLoading } = useMyToken();
+  const jwtToken = tokenData?.access_token ?? null;
   const [jwtCopied, setJwtCopied] = useState(false);
   const [jwtVisible, setJwtVisible] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setAgentLoading(true);
-      api.identity.myAgents().then(setMyAgents).catch(() => setMyAgents(null)).finally(() => setAgentLoading(false));
-      setJwtLoading(true);
-      api.auth.myToken().then((res) => setJwtToken(res.access_token)).catch(() => setJwtToken(null)).finally(() => setJwtLoading(false));
-    }
-  }, [user]);
 
   if (isLoading) {
     return (

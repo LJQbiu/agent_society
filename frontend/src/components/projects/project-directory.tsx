@@ -1,17 +1,11 @@
 "use client";
-import { Folder, Star, FolderOpen } from "lucide-react";
-
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { Folder, Star, FolderOpen, Coins } from "lucide-react";
+import { useProjects } from "@/hooks/use-queries";
 import type { Project } from "@/types";
 
 export function ProjectDirectory() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.observatory.listProjects({}).then(data => setProjects(data.projects)).finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading } = useProjects({});
+  const projects = data?.projects ?? [];
 
   return (
     <div className="space-y-6">
@@ -26,7 +20,7 @@ export function ProjectDirectory() {
         </div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
           <span className="ml-3 text-gray-500">加载中...</span>

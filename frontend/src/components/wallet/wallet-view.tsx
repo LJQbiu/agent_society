@@ -1,42 +1,25 @@
 "use client";
 import { Wallet, DollarSign, ArrowUpRight, FileText } from "lucide-react";
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { useBalance, useTransactions, useSettlementMutations } from "@/hooks/use-queries";
 import type { BalanceResponse, TransactionResponse, TransactionListResponse } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 
 export function WalletView() {
   const { user } = useAuth();
-  const [balance, setBalance] = useState<BalanceResponse | null>(null);
-  const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { data: balance, isLoading: loading } = useBalance(user?.id ?? "");
+  const { data: txsData, isLoading: txsLoading } = useTransactions(user?.id ?? "");
+  const transactions = (txsData as TransactionListResponse)?.transactions ?? [];
+  const { transfer: transferMutation } = useSettlementMutations();
 
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [transferDesc, setTransferDesc] = useState("");
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const bal = await api.settlement.getBalance(user!.id) as BalanceResponse;
-      setBalance(bal);
-      const txs = await api.settlement.getTransactions(user!.id) as TransactionListResponse;
-      setTransactions(txs.transactions || []);
-    } catch (e: any) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleTransfer = async () => {
     try {
-      await api.settlement.transfer({
+      await transferMutation.mutateAsync({
         from_holder_id: user!.id,
         from_holder_type: "agent",
         to_holder_id: transferTo,
@@ -47,7 +30,6 @@ export function WalletView() {
       setTransferTo("");
       setTransferAmount("");
       setTransferDesc("");
-      loadData();
     } catch (e: any) {
       console.error(e);
     }

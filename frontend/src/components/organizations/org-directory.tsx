@@ -1,42 +1,21 @@
 "use client";
 import { Network, Users } from "lucide-react";
-
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import type { OrganizationItem, OrganizationDetailResponse } from "@/types";
+import { useState } from "react";
+import { useOrganizations, useOrganizationDetail, useOrgMessages } from "@/hooks/use-queries";
 
 export function OrganizationDirectory() {
-  const [orgs, setOrgs] = useState<OrganizationItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedOrg, setSelectedOrg] = useState<OrganizationDetailResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [messagesLoading, setMessagesLoading] = useState(false);
+  const { data: orgsData, isLoading } = useOrganizations();
+  const orgs = orgsData?.organizations ?? [];
 
-  useEffect(() => {
-    api.observatory.listOrganizations().then(r => setOrgs(r.organizations)).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const { data: selectedOrg, isLoading: detailLoading } = useOrganizationDetail(selectedOrgId ?? "");
+  const { data: msgsData, isLoading: messagesLoading } = useOrgMessages(selectedOrgId ?? "");
+  const messages = msgsData?.messages ?? [];
 
-  const viewDetail = async (orgId: string) => {
-    setDetailLoading(true);
-    try {
-      const detail = await api.observatory.getOrganizationDetail(orgId);
-      setSelectedOrg(detail);
-      // Load messages
-      setMessagesLoading(true);
-      try {
-        const msgData = await api.organizations.getMessages(orgId);
-        setMessages(msgData.messages || []);
-      } catch { setMessages([]); }
-      setMessagesLoading(false);
-    } catch { setSelectedOrg(null); }
-    setDetailLoading(false);
-  };
-
-  if (selectedOrg) {
+  if (selectedOrgId && selectedOrg) {
     return (
       <div className="p-4">
-        <button onClick={() => setSelectedOrg(null)} className="mb-4 text-blue-500 hover:underline">← Back to list</button>
+        <button onClick={() => setSelectedOrgId(null)} className="mb-4 text-blue-500 hover:underline">← Back to list</button>
         <div className="bg-white p-4 rounded shadow mb-4">
           <h2 className="font-bold text-xl mb-2">{selectedOrg.name}</h2>
           <p className="text-gray-600 mb-2">{selectedOrg.description || "No description"}</p>
@@ -104,10 +83,10 @@ export function OrganizationDirectory() {
   return (
     <div className="p-4">
       <h2 className="font-bold text-xl mb-4">Organizations</h2>
-      {loading ? <p>Loading...</p> : orgs.length === 0 ? <p className="text-gray-400">No organizations found.</p> : (
+      {isLoading ? <p>Loading...</p> : orgs.length === 0 ? <p className="text-gray-400">No organizations found.</p> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {orgs.map(o => (
-            <div key={o.org_id} className="bg-white p-4 rounded shadow cursor-pointer hover:shadow-lg transition" onClick={() => viewDetail(o.org_id)}>
+            <div key={o.org_id} className="bg-white p-4 rounded shadow cursor-pointer hover:shadow-lg transition" onClick={() => setSelectedOrgId(o.org_id)}>
               <h3 className="font-bold mb-1">{o.name}</h3>
               <p className="text-gray-600 text-sm mb-2">{o.description || "No description"}</p>
               <div className="flex gap-3 text-sm">
