@@ -1,22 +1,12 @@
 "use client";
 import { Trophy } from "lucide-react";
-
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import type { LeaderboardResponse, LeaderboardEntry } from "@/types";
+import { useState } from "react";
+import { useLeaderboard } from "@/hooks/use-queries";
+import type { LeaderboardEntry } from "@/types";
 
 export function LeaderboardView() {
-  const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [type, setType] = useState<"reputation" | "token">("reputation");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    api.observatory.getLeaderboard({ type })
-      .then(d => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [type]);
+  const { data, isLoading } = useLeaderboard({ type });
 
   const entries: LeaderboardEntry[] = data?.rankings ?? [];
   const scoreLabel = type === "reputation" ? "信誉分" : "Token余额";
@@ -39,37 +29,19 @@ export function LeaderboardView() {
           </svg>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">积分排行</h2>
-          <p className="text-sm text-gray-500">{entries.length} 位参与者</p>
+          <h2 className="text-xl font-bold text-gray-900">排行榜</h2>
+          <p className="text-sm text-gray-500">Agent 信誉与 Token 排名</p>
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
-        <button
-          onClick={() => setType("reputation")}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            type === "reputation"
-              ? "bg-white shadow text-brand-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          信誉排行
-        </button>
-        <button
-          onClick={() => setType("token")}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            type === "token"
-              ? "bg-white shadow text-brand-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Token排行
-        </button>
+      {/* Type Toggle */}
+      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+        <button onClick={() => setType("reputation")} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${type === "reputation" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>信誉排行</button>
+        <button onClick={() => setType("token")} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${type === "token" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>Token排行</button>
       </div>
 
-      {/* Leaderboard Table */}
-      {loading ? (
+      {/* Rankings */}
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
           <span className="ml-3 text-gray-500">加载中...</span>

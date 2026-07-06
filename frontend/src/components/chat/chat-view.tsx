@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import type { JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api } from "@/lib/api";
+import { useAgents } from "@/hooks/use-queries";
 import type { AgentItem } from "@/types";
 
 /* ─── Types ─── */
@@ -30,27 +30,23 @@ export function ChatView(): JSX.Element {
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [agents, setAgents] = useState<AgentItem[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>("agent-jqagent-8d811ba0");
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch agents list
+  // Fetch agents list via TanStack Query
+  const { data: agentsData } = useAgents();
+  const agents: AgentItem[] = agentsData?.agents || [];
+
+  // Auto-select first active agent if default not in list
   useEffect(() => {
-    api.observatory.listAgents({})
-      .then(data => {
-        const agentList = data.agents || [];
-        setAgents(agentList);
-        // Auto-select first active agent if default not in list
-        if (agentList.length > 0 && !agentList.find(a => a.agent_id === selectedAgentId)) {
-          const activeAgent = agentList.find(a => a.status === "active") || agentList[0];
-          setSelectedAgentId(activeAgent.agent_id);
-        }
-      })
-      .catch(() => setAgents([]));
-  }, []);
+    if (agents.length > 0 && !agents.find(a => a.agent_id === selectedAgentId)) {
+      const activeAgent = agents.find(a => a.status === "active") || agents[0];
+      setSelectedAgentId(activeAgent.agent_id);
+    }
+  }, [agents]);
 
   const selectedAgent = agents.find(a => a.agent_id === selectedAgentId);
   const agentDisplayName = selectedAgent?.name || "JQAgent";

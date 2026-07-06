@@ -1,10 +1,9 @@
 "use client";
 import { MessageCircle, Send, Mail, Loader2, Activity } from "lucide-react";
-
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/components/common/toast";
+import { useMessages, useSendMessage } from "@/hooks/use-queries";
 
 interface Message {
   id: string;
@@ -19,28 +18,12 @@ interface Message {
 export function MessageCenter() {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { data: messages = [], isLoading } = useMessages(user?.id || "", { limit: 50 });
+  const sendMessageMutation = useSendMessage();
+
   const [recipient, setRecipient] = useState("");
   const [content, setContent] = useState("");
   const [msgType, setMsgType] = useState("task-request");
-  const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    if (user) loadMessages();
-  }, [user]);
-
-  const loadMessages = async () => {
-    try {
-      setLoading(true);
-      const data = await api.a2a.getMessages(user?.id || "", { limit: 50 }) as any;
-      setMessages(data.messages || data || []);
-    } catch (e: any) {
-      showToast(e.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const sendMessage = async () => {
     if (!recipient.trim() || !content.trim()) {
@@ -48,8 +31,7 @@ export function MessageCenter() {
       return;
     }
     try {
-      setSending(true);
-      await api.a2a.sendMessage({
+      await sendMessageMutation.mutateAsync({
         from_agent_id: user!.id,
         to_agent_id: recipient,
         content: { text: content },
@@ -58,11 +40,8 @@ export function MessageCenter() {
       showToast("消息已发送", "success");
       setRecipient("");
       setContent("");
-      loadMessages();
     } catch (e: any) {
       showToast(e.message, "error");
-    } finally {
-      setSending(false);
     }
   };
 
@@ -79,70 +58,52 @@ export function MessageCenter() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center">
-          <MessageCircle className="w-5 h-5 text-white" strokeWidth={1.5} />
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-md">
+          <MessageCircle className="w-5 h-5" strokeWidth={1.5} />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">消息中心</h1>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">消息中心</h2>
+          <p className="text-sm text-gray-500">A2A 通信与协作</p>
+        </div>
       </div>
 
       {/* Send Message */}
-      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+      <section className="glass-card p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Send className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
           发送消息
         </h2>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">接收方 ID</label>
-              <input
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
-                placeholder="Agent 或用户 ID"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">消息类型</label>
-              <select
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none bg-white"
-                value={msgType}
-                onChange={(e) => setMsgType(e.target.value)}
-              >
-                <option value="task-request">任务请求</option>
-                <option value="task-response">任务响应</option>
-                <option value="notification">通知</option>
-                <option value="chat">聊天</option>
-              </select>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">接收方 Agent ID</label>
+            <input value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="Agent ID" className="input w-full" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">内容</label>
-            <textarea
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none resize-none"
-              rows={3}
-              placeholder="消息内容..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-            />
+            <label className="text-sm font-medium text-gray-700 mb-1 block">消息类型</label>
+            <select value={msgType} onChange={e => setMsgType(e.target.value)} className="input w-full">
+              <option value="task-request">任务请求</option>
+              <option value="task-response">任务响应</option>
+              <option value="notification">通知</option>
+              <option value="chat">聊天</option>
+            </select>
           </div>
-          <button
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-600 text-white font-medium hover:shadow-lg hover:shadow-brand-500/25 transition-all duration-200 disabled:opacity-50"
-            onClick={sendMessage}
-            disabled={sending}
-          >
-            {sending ? "发送中..." : "发送消息"}
-          </button>
         </div>
+        <div className="mt-4">
+          <label className="text-sm font-medium text-gray-700 mb-1 block">内容</label>
+          <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="输入消息内容..." className="input w-full min-h-[80px]" />
+        </div>
+        <button onClick={sendMessage} disabled={sendMessageMutation.isPending} className="btn-primary mt-4 px-6 py-2">
+          {sendMessageMutation.isPending ? "发送中..." : "发送"}
+        </button>
       </section>
 
-      {/* Messages List */}
-      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+      {/* Messages */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Mail className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
           收发记录
         </h2>
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-12 text-gray-400">
             <Loader2 className="w-6 h-6 animate-spin mr-2" strokeWidth={2} />
             加载中...
@@ -154,7 +115,7 @@ export function MessageCenter() {
           </div>
         ) : (
           <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-            {messages.map((msg) => (
+            {(messages as Message[]).map((msg) => (
               <div
                 key={msg.id}
                 className={`rounded-xl p-4 transition-all hover:shadow-sm ${

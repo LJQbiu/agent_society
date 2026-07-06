@@ -1,257 +1,140 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import type {
-  ProjectCRUDResponse, ProjectCRUDListResponse,
-  ProjectCreateRequest, ProjectUpdateRequest,
-  ProjectParticipantResponse, ParticipantListResponse,
-  JoinProjectRequest, StatusTransitionRequest,
-  MyAgentsResponse,
-  ChatMessageResponse, ChatMessageListResponse,
-  ProjectTodoResponse, TodoListResponse, TodoCreate, TodoUpdate,
-} from "@/types";
-import { useAuth } from "@/hooks/use-auth";
+import {
+  useProjectCrudList, useProjectCrudDetail, useProjectParticipants,
+  useProjectChatMessages, useProjectTodos, useProjectMutations, useMyAgents,
+} from "@/hooks/use-queries";
+import type { ProjectCreateRequest } from "@/types";
 
-type Tab = "list" | "create" | "detail";
+export default function ProjectManager() {
+  // ─── Query hooks ───
+  const { data: projectListData, isLoading: projectsLoading } = useProjectCrudList({});
+  const projects = projectListData?.projects || [];
 
-export function ProjectManager() {
-  const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>("list");
-  const [projects, setProjects] = useState<ProjectCRUDResponse[]>([]);
+  const myAgentsData = useMyAgents();
+  const myAgents = myAgentsData.data;
+
+  // ─── Local state ───
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [tab, setTab] = useState<"list" | "create" | "detail">("list");
   const [search, setSearch] = useState("");
-  const [myOnly, setMyOnly] = useState(false);  // "我的项目" toggle
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedProject, setSelectedProject] = useState<ProjectCRUDResponse | null>(null);
-  const [participants, setParticipants] = useState<ProjectParticipantResponse[]>([]);
-  const [myAgents, setMyAgents] = useState<MyAgentsResponse | null>(null);
-  const [selectedJoinAgent, setSelectedJoinAgent] = useState<string>("");
-  const [messages, setMessages] = useState<any[]>([]);
-  const [messagesLoading, setMessagesLoading] = useState(false);
-
-  // Chat & Todo state
-  const [chatMessages, setChatMessages] = useState<ChatMessageResponse[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [todos, setTodos] = useState<ProjectTodoResponse[]>([]);
-  const [todoForm, setTodoForm] = useState<TodoCreate>({ title: "", description: "", priority: "medium" });
+  const [selectedJoinAgent, setSelectedJoinAgent] = useState("");
+  const [newStatus, setNewStatus] = useState("");
   const [showTodoForm, setShowTodoForm] = useState(false);
-
-  // Create form
+  const [capabilitiesInput, setCapabilitiesInput] = useState("");
   const [createForm, setCreateForm] = useState<ProjectCreateRequest>({
-    name: "",
-    description: "",
-    type: "research",
-    budget: 0,
-    reputation_budget: 0,
-    required_capabilities: [],
-    max_participants: 10,
+    name: "", description: "", type: "task", max_participants: 10,
+    budget: 0, reputation_budget: 0, required_capabilities: [],
     organization_id: "",
   });
-  const [capabilitiesInput, setCapabilitiesInput] = useState("");
+  const [updateForm, setUpdateForm] = useState<Record<string, string>>({});
+  const [todoForm, setTodoForm] = useState({ title: "", description: "", priority: "medium" });
 
-  // Update form
-  const [updateForm, setUpdateForm] = useState<ProjectUpdateRequest>({});
+  // ─── Detail queries (enabled only when selectedProjectId set) ───
+  const { data: selectedProject } = useProjectCrudDetail(selectedProjectId);
+  const { data: participantsData } = useProjectParticipants(selectedProjectId);
+  const participants = participantsData?.participants || [];
+  const { data: chatData } = useProjectChatMessages(selectedProjectId, 50);
+  const chatMessages = chatData?.messages || [];
+  const { data: todosData } = useProjectTodos(selectedProjectId);
+  const todos = todosData?.todos || [];
 
-  // Status transition
-  const [newStatus, setNewStatus] = useState("");
+  // ─── Mutations ───
+  const { createProject, updateProject, joinProject, leaveProject,
+    updateProjectStatus, sendChatMessage, createTodo, updateTodo, claimTodo } = useProjectMutations();
 
-  // Load projects
-  const loadProjects = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const params: Record<string, string> = {};
-      if (search) params.search = search;
-      if (myOnly && user?.id) params.owner_id = user.id;
-      const data = await api.projects.list(params);
-      setProjects(data.projects || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to load projects");
-    } finally {
-      setLoading(false);
-    }
+  // ─── Handlers ───
+  const viewDetail = (id: string) => {
+    setSelectedProjectId(id);
+    setTab("detail");
   };
 
-  useEffect(() => { loadProjects(); api.identity.myAgents().then(r => setMyAgents(r)).catch(() => {}); }, [myOnly]);
-
-  // Poll chat & todo when viewing detail
-  useEffect(() => {
-    if (tab !== "detail" || !selectedProject) return;
-    const poll = async () => {
-      try {
-        const chatData = await api.projects.listChatMessages(selectedProject.id);
-        setChatMessages(chatData.messages || []);
-      } catch {}
-      try {
-        const todoData = await api.projects.listTodos(selectedProject.id);
-        setTodos(todoData.todos || []);
-      } catch {}
-    };
-    const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);
-  }, [tab, selectedProject?.id]);
-
-  // Send chat message
-  const handleSendChat = async () => {
-    if (!selectedProject || !chatInput.trim()) return;
-    try {
-      await api.projects.sendChatMessage(selectedProject.id, { content: chatInput.trim(), sender_type: "human" });
-      setChatInput("");
-      const chatData = await api.projects.listChatMessages(selectedProject.id);
-      setChatMessages(chatData.messages || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to send message");
-    }
-  };
-
-  // Create todo (only leader)
-  const handleCreateTodo = async (e: React.FormEvent) => {
+  const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProject || !todoForm.title.trim()) return;
-    try {
-      await api.projects.createTodo(selectedProject.id, todoForm);
-      setTodoForm({ title: "", description: "", priority: "medium" });
-      setShowTodoForm(false);
-      const todoData = await api.projects.listTodos(selectedProject.id);
-      setTodos(todoData.todos || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to create todo");
-    }
+    const capabilities = capabilitiesInput.split(",").map(s => s.trim()).filter(Boolean);
+    createProject.mutate({ ...createForm, required_capabilities: capabilities }, {
+      onSuccess: (data: any) => {
+        setCreateForm({ name: "", description: "", type: "task", max_participants: 10,
+          budget: 0, reputation_budget: 0, required_capabilities: [], organization_id: "" });
+        setCapabilitiesInput("");
+        viewDetail(data.id);
+      },
+    });
   };
 
-  // Claim todo
-  const handleClaimTodo = async (todoId: string) => {
-    if (!selectedProject) return;
-    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
-    if (!agentId) { setError("请先选择一个Agent来认领此TODO"); return; }
-    try {
-      await api.projects.claimTodo(selectedProject.id, todoId, { agent_id: agentId, claimer_type: "agent" });
-      const todoData = await api.projects.listTodos(selectedProject.id);
-      setTodos(todoData.todos || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to claim todo");
-    }
-  };
-
-  // Update todo status
-  const handleUpdateTodoStatus = async (todoId: string, status: "open" | "in_progress" | "completed" | "cancelled") => {
-    if (!selectedProject) return;
-    try {
-      await api.projects.updateTodo(selectedProject.id, todoId, { status });
-      const todoData = await api.projects.listTodos(selectedProject.id);
-      setTodos(todoData.todos || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to update todo");
-    }
-  };
-
-  // Create project
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const payload = { ...createForm };
-      if (capabilitiesInput) {
-        payload.required_capabilities = capabilitiesInput.split(",").map(s => s.trim());
-      }
-      if (!payload.organization_id) delete payload.organization_id;
-      await api.projects.create(payload);
-      setTab("list");
-      setCreateForm({ name: "", description: "", type: "research", budget: 0, reputation_budget: 0, required_capabilities: [], max_participants: 10, organization_id: "" });
-      setCapabilitiesInput("");
-      loadProjects();
-    } catch (e: any) {
-      setError(e.message || "Failed to create project");
-    }
+    if (!selectedProjectId) return;
+    updateProject.mutate({ id: selectedProjectId, data: updateForm }, {
+      onSuccess: () => setUpdateForm({}),
+    });
   };
 
-  // View detail
-  const viewDetail = async (id: string) => {
-    try {
-      const proj = await api.projects.get(id);
-      setSelectedProject(proj);
-      const members = await api.projects.listParticipants(id);
-      setParticipants(members.participants || []);
-      setMessagesLoading(true);
-      try {
-        const msgData = await api.projects.getMessages(id);
-        setMessages(msgData.messages || []);
-      } catch { setMessages([]); }
-      setMessagesLoading(false);
-      // Load chat messages
-      try {
-        const chatData = await api.projects.listChatMessages(id);
-        setChatMessages(chatData.messages || []);
-      } catch { setChatMessages([]); }
-      // Load todos
-      try {
-        const todoData = await api.projects.listTodos(id);
-        setTodos(todoData.todos || []);
-      } catch { setTodos([]); }
-      setTab("detail");
-    } catch (e: any) {
-      setError(e.message || "Failed to load project");
-    }
-  };
-
-  // Update project
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProject) return;
-    try {
-      const updated = await api.projects.update(selectedProject.id, updateForm);
-      setSelectedProject(updated);
-      setUpdateForm({});
-      loadProjects();
-    } catch (e: any) {
-      setError(e.message || "Failed to update project");
-    }
-  };
-
-  // Join project
-  const handleJoin = async (projectId: string) => {
+  const handleJoin = (projectId: string) => {
     const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
-    if (!agentId) { setError("No agent selected. Please select an agent first."); return; }
-    try {
-      const payload: JoinProjectRequest = { agent_id: agentId };
-      await api.projects.join(projectId, payload);
-      viewDetail(projectId);
-    } catch (e: any) {
-      setError(e.message || "Failed to join project");
-    }
+    if (!agentId) return;
+    joinProject.mutate({ id: projectId, data: { agent_id: agentId } }, {
+      onSuccess: () => viewDetail(projectId),
+    });
   };
 
-  // Leave project
-  const handleLeave = async (projectId: string) => {
+  const handleLeave = (projectId: string) => {
     const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
-    if (!agentId) { setError("No agent selected."); return; }
-    try {
-      await api.projects.leave(projectId, { agent_id: agentId } as JoinProjectRequest);
-      viewDetail(projectId);
-    } catch (e: any) {
-      setError(e.message || "Failed to leave project");
-    }
+    if (!agentId) return;
+    leaveProject.mutate({ id: projectId, data: { agent_id: agentId } }, {
+      onSuccess: () => viewDetail(projectId),
+    });
   };
 
-  // Status transition
-  const handleStatusTransition = async (projectId: string) => {
+  const handleStatusTransition = (projectId: string) => {
     if (!newStatus) return;
-    try {
-      const payload: StatusTransitionRequest = { new_status: newStatus as "recruiting" | "active" | "suspended" | "completed" | "revoked" };
-      await api.projects.updateStatus(projectId, payload);
-      viewDetail(projectId);
-      setNewStatus("");
-    } catch (e: any) {
-      setError(e.message || "Failed to change status");
-    }
+    updateProjectStatus.mutate({ id: projectId, data: { new_status: newStatus } }, {
+      onSuccess: () => { setNewStatus(""); },
+    });
   };
 
+  const handleCreateTodo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectId) return;
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    createTodo.mutate({ id: selectedProjectId, data: { ...todoForm, creator_agent_id: agentId } }, {
+      onSuccess: () => { setTodoForm({ title: "", description: "", priority: "medium" }); setShowTodoForm(false); },
+    });
+  };
+
+  const handleClaimTodo = (todoId: string) => {
+    if (!selectedProjectId) return;
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    claimTodo.mutate({ id: selectedProjectId, todoId, data: { claimer_type: "agent", agent_id: agentId } });
+  };
+
+  const handleUpdateTodoStatus = (todoId: string, status: string) => {
+    if (!selectedProjectId) return;
+    const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
+    updateTodo.mutate({ id: selectedProjectId, todoId, data: { status, agent_id: agentId } });
+  };
+
+  // ─── Computed ───
+  const filtered = projects.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.description?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const mutationError = createProject.error || updateProject.error || joinProject.error ||
+    leaveProject.error || updateProjectStatus.error || createTodo.error;
+
+  // ─── Render ───
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6">
       <h1 className="text-2xl font-bold mb-4">Project Collaboration</h1>
 
-      {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4">{error}</div>}
+      {mutationError && (
+        <div className="bg-red-100 text-red-700 p-2 rounded mb-4">
+          {(mutationError as any)?.message || "Operation failed"}
+        </div>
+      )}
 
       {/* Tab buttons */}
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -273,73 +156,64 @@ export function ProjectManager() {
         <div>
           <div className="flex gap-2 mb-4 items-center">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..." className="border p-2 rounded flex-1" />
-            <select
-              value={selectedJoinAgent}
-              onChange={e => setSelectedJoinAgent(e.target.value)}
-              className="border p-2 rounded text-sm"
-            >
+            <select value={selectedJoinAgent} onChange={e => setSelectedJoinAgent(e.target.value)} className="border p-2 rounded text-sm">
               <option value="">选择Agent...</option>
               {myAgents?.agents?.map(a => (
                 <option key={a.id} value={a.id}>{a.name || a.id}</option>
               ))}
             </select>
-            <button onClick={loadProjects} className="bg-blue-600 text-white px-3 py-2 rounded">Search</button>
-            <button
-              onClick={() => setMyOnly(!myOnly)}
-              className={myOnly ? "bg-purple-600 text-white px-3 py-2 rounded" : "bg-gray-200 px-3 py-2 rounded"}
-              title="Show only projects created by my agents"
-            >
-              🏠 My Projects
-            </button>
           </div>
-          {loading ? <p>Loading...</p> : (
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-2">Name</th>
-                  <th className="border p-2">Type</th>
-                  <th className="border p-2">Status</th>
-                  <th className="border p-2">Budget</th>
-                  <th className="border p-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map(p => (
-                  <tr key={p.id} className="border">
-                    <td className="p-2">{p.name}</td>
-                    <td className="p-2">{p.type || "-"}</td>
-                    <td className="p-2">{p.status}</td>
-                    <td className="p-2">{p.budget || 0}</td>
-                    <td className="p-2 flex gap-1">
-                      <button onClick={() => viewDetail(p.id)} className="bg-blue-500 text-white px-2 py-1 rounded text-sm">View</button>
-                      <button onClick={() => handleJoin(p.id)} className="bg-green-500 text-white px-2 py-1 rounded text-sm" disabled={!selectedJoinAgent && !myAgents?.agents?.[0]?.id}>🤝 加入</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          {projectsLoading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-gray-500">No projects found</p>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map(p => (
+                <div key={p.id} className="bg-white p-4 rounded shadow hover:shadow-md transition">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-lg">{p.name}</h3>
+                      <p className="text-gray-600 text-sm mt-1">{p.description || "No description"}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      p.status === "active" ? "bg-green-100 text-green-700" :
+                      p.status === "recruiting" ? "bg-blue-100 text-blue-700" :
+                      p.status === "suspended" ? "bg-yellow-100 text-yellow-700" :
+                      p.status === "completed" ? "bg-gray-100 text-gray-700" :
+                      "bg-red-100 text-red-700"
+                    }`}>{p.status}</span>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => viewDetail(p.id)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">View</button>
+                    <button onClick={() => handleJoin(p.id)} className="bg-green-600 text-white px-3 py-1 rounded text-sm" disabled={joinProject.isPending}>🤝 加入</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* Create tab */}
       {tab === "create" && (
-        <form onSubmit={handleCreate} className="space-y-4 bg-white p-4 rounded shadow">
+        <form onSubmit={handleCreate} className="bg-white p-6 rounded shadow space-y-4">
+          <h2 className="text-xl font-bold">Create New Project</h2>
           <div>
-            <label className="block font-medium mb-1">Project Name *</label>
+            <label className="block font-medium mb-1">Name</label>
             <input value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} className="border p-2 rounded w-full" required />
           </div>
           <div>
             <label className="block font-medium mb-1">Description</label>
             <textarea value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} className="border p-2 rounded w-full" rows={3} />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-medium mb-1">Type</label>
               <select value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))} className="border p-2 rounded w-full">
-                <option value="research">Research</option>
-                <option value="development">Development</option>
-                <option value="creative">Creative</option>
+                <option value="task">Task</option>
+                <option value="project">Project</option>
                 <option value="service">Service</option>
               </select>
             </div>
@@ -366,7 +240,9 @@ export function ProjectManager() {
             <label className="block font-medium mb-1">Organization ID</label>
             <input value={createForm.organization_id} onChange={e => setCreateForm(f => ({ ...f, organization_id: e.target.value }))} placeholder="Optional: link to org" className="border p-2 rounded w-full" />
           </div>
-          <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Create Project</button>
+          <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" disabled={createProject.isPending}>
+            {createProject.isPending ? "Creating..." : "Create Project"}
+          </button>
         </form>
       )}
 
@@ -385,11 +261,7 @@ export function ProjectManager() {
 
           {/* Actions */}
           <div className="flex gap-2 items-center flex-wrap">
-            <select
-              value={selectedJoinAgent}
-              onChange={e => setSelectedJoinAgent(e.target.value)}
-              className="border p-1 rounded text-sm"
-            >
+            <select value={selectedJoinAgent} onChange={e => setSelectedJoinAgent(e.target.value)} className="border p-1 rounded text-sm">
               <option value="">选择Agent...</option>
               {myAgents?.agents?.map(a => (
                 <option key={a.id} value={a.id}>{a.name || a.id}</option>
@@ -414,12 +286,12 @@ export function ProjectManager() {
             <h3 className="font-bold mb-2">Participants ({participants.length})</h3>
             {participants.length === 0 ? <p className="text-gray-500">No participants yet</p> : (
               <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-2 text-left">Agent</th>
-                  <th className="border p-2 text-left hidden sm:table-cell">Role</th>
-                  <th className="border p-2 text-left">Status</th>
-                  <th className="border p-2 text-left hidden sm:table-cell">Joined</th>
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-2 text-left">Agent</th>
+                    <th className="border p-2 text-left hidden sm:table-cell">Role</th>
+                    <th className="border p-2 text-left">Status</th>
+                    <th className="border p-2 text-left hidden sm:table-cell">Joined</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -445,10 +317,7 @@ export function ProjectManager() {
             <div className="bg-white p-4 rounded shadow">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold">💬 Multi-Agent Chat</h3>
-                <Link
-                  href={`/projects/${selectedProject.id}/chat`}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                >
+                <Link href={`/projects/${selectedProject.id}/chat`} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                   进入完整Chat →
                 </Link>
               </div>
@@ -473,7 +342,6 @@ export function ProjectManager() {
             <div className="bg-white p-4 rounded shadow">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold">📋 TODO List</h3>
-                {/* Create todo (backend enforces leader-only) */}
                 {myAgents && myAgents.agents.length > 0 && (
                   <button onClick={() => setShowTodoForm(!showTodoForm)} className="bg-purple-600 text-white px-2 py-1 rounded text-sm hover:bg-purple-700">
                     + New TODO
@@ -512,19 +380,13 @@ export function ProjectManager() {
                       </div>
                       <div className="flex gap-1">
                         {todo.status === "pending" && (
-                          <button onClick={() => handleClaimTodo(todo.id)} className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Claim this TODO">
-                            🤝 Claim
-                          </button>
+                          <button onClick={() => handleClaimTodo(todo.id)} className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600" title="Claim this TODO">🤝 Claim</button>
                         )}
                         {todo.status === "claimed" && (
-                          <button onClick={() => handleUpdateTodoStatus(todo.id, "in_progress")} className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600" title="Start working">
-                            ▶ Start
-                          </button>
+                          <button onClick={() => handleUpdateTodoStatus(todo.id, "in_progress")} className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600" title="Start working">▶ Start</button>
                         )}
                         {todo.status === "in_progress" && (
-                          <button onClick={() => handleUpdateTodoStatus(todo.id, "completed")} className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600" title="Mark completed">
-                            ✅ Done
-                          </button>
+                          <button onClick={() => handleUpdateTodoStatus(todo.id, "completed")} className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600" title="Mark completed">✅ Done</button>
                         )}
                       </div>
                     </div>
@@ -554,7 +416,9 @@ export function ProjectManager() {
                 <label className="block font-medium mb-1">Description</label>
                 <textarea value={updateForm.description || ""} onChange={e => setUpdateForm(f => ({ ...f, description: e.target.value }))} className="border p-2 rounded w-full" rows={2} />
               </div>
-              <button type="submit" className="bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700">Update</button>
+              <button type="submit" className="bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700" disabled={updateProject.isPending}>
+                {updateProject.isPending ? "Updating..." : "Update"}
+              </button>
             </form>
           </div>
         </div>

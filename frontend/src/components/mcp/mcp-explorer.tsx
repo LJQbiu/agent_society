@@ -1,7 +1,6 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { useMcpTools, useMcpResources, useMcpCallTool } from "@/hooks/use-queries";
 import type { MCPTool, MCPResource } from "@/types";
 
 interface CallResult {
@@ -10,38 +9,22 @@ interface CallResult {
 }
 
 export function MCPExplorer() {
-  const [tools, setTools] = useState<MCPTool[]>([]);
-  const [resources, setResources] = useState<MCPResource[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data: tools = [], isLoading: toolsLoading, error: toolsError } = useMcpTools();
+  const { data: resources = [], isLoading: resLoading } = useMcpResources();
+  const callToolMutation = useMcpCallTool();
+
   const [selectedTool, setSelectedTool] = useState<string>("");
   const [toolArgs, setToolArgs] = useState("{}");
   const [callResult, setCallResult] = useState<CallResult | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const t = await api.mcp.listTools();
-      setTools(Array.isArray(t) ? t : []);
-      const r = await api.mcp.listResources();
-      setResources(Array.isArray(r) ? r : []);
-    } catch (e: any) {
-      setError(e.message || "Failed to load MCP data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = toolsLoading || resLoading;
 
   const handleCallTool = async () => {
     if (!selectedTool) return;
     try {
       let args = {};
       try { args = JSON.parse(toolArgs); } catch { args = {}; }
-      const result = await api.mcp.callTool(selectedTool, args);
+      const result = await callToolMutation.mutateAsync({ toolName: selectedTool, args });
       setCallResult(result as CallResult);
     } catch (e: any) {
       setCallResult({ content: [], error: e.message });
@@ -56,8 +39,8 @@ export function MCPExplorer() {
       <div className="card">
         <h3 className="text-lg font-semibold mb-3">可用工具</h3>
         {loading && <p>加载中...</p>}
-        {error && <p className="text-red-500">{error}</p>}
-        {!loading && !error && (
+        {toolsError && <p className="text-red-500">{toolsError.message}</p>}
+        {!loading && !toolsError && (
           <div className="space-y-2">
             {tools.map((t) => (
               <div key={t.name} className="p-3 border rounded hover:bg-blue-50 cursor-pointer"
@@ -81,7 +64,9 @@ export function MCPExplorer() {
             placeholder="输入参数 (JSON格式)"
             className="input w-full min-h-[100px]"
           />
-          <button onClick={handleCallTool} className="btn btn-primary mt-2">执行</button>
+          <button onClick={handleCallTool} disabled={callToolMutation.isPending} className="btn btn-primary mt-2">
+            {callToolMutation.isPending ? "执行中..." : "执行"}
+          </button>
           {callResult && (
             <div className="mt-3 p-3 bg-gray-50 rounded text-sm">
               {callResult.error && <p className="text-red-500">错误: {callResult.error}</p>}
