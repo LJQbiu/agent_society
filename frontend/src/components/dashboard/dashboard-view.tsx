@@ -5,43 +5,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMyAgents, useMyToken } from "@/hooks/use-queries";
 import { useState } from "react";
 import type { MyAgentsResponse } from "@/types";
-
+import { StatCard } from "./stat-card";
+import { FeatureCard } from "./feature-card";
 import { User, Key, Network, LayoutGrid, Wallet, MessageCircle, IdCard, Eye, Trophy, Copy, Check, Shield } from "lucide-react";
 
-/* ── Stat Card Component ── */
-function StatCard({ icon, label, value, sub, gradient }: {
-  icon: React.ReactNode; label: string; value: string | number; sub?: string; gradient: string;
-}) {
-  return (
-    <div className="glass-card p-5 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-xl ${gradient} flex items-center justify-center text-white shadow-lg`}>
-        {icon}
-      </div>
-      <div>
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</div>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
-/* ── Feature Link Card ── */
-function FeatureCard({ href, icon, title, desc, gradient }: {
-  href: string; icon: React.ReactNode; title: string; desc: string; gradient: string;
-}) {
-  return (
-    <Link href={href} className="glass-card group p-5 flex flex-col items-center text-center hover:shadow-xl transition-all duration-300">
-      <div className={`w-14 h-14 rounded-2xl ${gradient} flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform duration-300 mb-3`}>
-        {icon}
-      </div>
-      <div className="font-semibold text-gray-800 group-hover:text-brand-600 transition-colors">{title}</div>
-      <div className="text-xs text-gray-400 mt-1">{desc}</div>
-    </Link>
-  );
-}
-
-/* ── Main Dashboard ── */
 export function DashboardView() {
   const { user, isLoading } = useAuth();
   const { data: myAgentsData, isLoading: agentLoading } = useMyAgents();
