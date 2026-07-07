@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
+import type { HumanProfile } from "@/types";
 import { NotificationBadge } from "@/components/common/notification-badge";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
@@ -138,7 +139,7 @@ function ObservatoryDropdown({ pathname }: { pathname: string }) {
 }
 
 /* ─── User Avatar Dropdown ─── */
-function UserDropdown({ user, logout, pathname }: { user: any; logout: () => void; pathname: string }) {
+function UserDropdown({ user, logout, pathname }: { user: HumanProfile; logout: () => void; pathname: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
