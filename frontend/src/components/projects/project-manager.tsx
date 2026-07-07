@@ -106,7 +106,7 @@ export default function ProjectManager() {
 
       {/* Alerts */}
       {mutationError && (
-        <ErrorAlert message={(mutationError as any)?.message || "操作失败"} onClose={() => {}} />
+        <ErrorAlert message={(mutationError as Error)?.message || "操作失败"} onClose={() => {}} />
       )}
       {successMsg && (
         <SuccessAlert message={successMsg} onClose={() => setSuccessMsg("")} />

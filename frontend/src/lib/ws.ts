@@ -26,7 +26,7 @@ interface WSMessage {
 type EventCallback = (data: WSMessage) => void;
 
 // WS后端地址 — 直连后端(不经过Next.js proxy,因为WS无法走HTTP代理)
-function getWSBaseUrl(): string {
+export function getWSBaseUrl(): string {
   // 开发环境直连后端; 生产环境需配置
   const backendUrl = process.env.NEXT_PUBLIC_WS_URL;
   if (backendUrl) return backendUrl;

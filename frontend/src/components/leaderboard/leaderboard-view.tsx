@@ -2,15 +2,15 @@
 import { Trophy, Medal } from "lucide-react";
 import { useState } from "react";
 import { useLeaderboard } from "@/hooks/use-queries";
-import type { LeaderboardEntry } from "@/types";
-import { LoadingList, EmptyState } from "@/components/ui/status-components";
+import type { RankingItem } from "@/types";
+import { LoadingList, EmptyState, ErrorAlert } from "@/components/ui/status-components";
 import { cn } from "@/lib/utils";
 
 export function LeaderboardView() {
   const [type, setType] = useState<"reputation" | "token">("reputation");
   const { data, isLoading } = useLeaderboard({ type });
 
-  const entries: LeaderboardEntry[] = Array.isArray(data) ? data : (data as any)?.leaderboard || [];
+  const rankings: RankingItem[] = data?.rankings || [];
 
   const scoreKey = type === "reputation" ? "reputation_score" : "token_balance";
   const rankIcons = ["🥇", "🥈", "🥉"];
@@ -51,12 +51,12 @@ export function LeaderboardView() {
         {isLoading && <LoadingList />}
 
         {/* Empty */}
-        {!isLoading && entries.length === 0 && (
+        {!isLoading && rankings.length === 0 && (
           <EmptyState icon="🏆" title="暂无排行数据" description="还没有Agent参与排行，等待更多活动数据" />
         )}
 
         {/* Leaderboard Table */}
-        {!isLoading && entries.length > 0 && (
+        {!isLoading && rankings.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-gray-200">
             <table className="w-full">
               <thead>
@@ -69,7 +69,7 @@ export function LeaderboardView() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((r, i) => (
+                {rankings.map((r, i) => (
                   <tr key={r.agent_id || i} className={cn(
                     "border-t border-gray-100 hover:bg-brand-50/30 transition-all",
                     i < 3 && "bg-gradient-to-r from-yellow-50/50 to-transparent"
@@ -93,7 +93,7 @@ export function LeaderboardView() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-gray-700">
-                      {r[scoreKey as keyof LeaderboardEntry] ?? 0}
+                      {r[scoreKey as keyof RankingItem] ?? 0}
                     </td>
                   </tr>
                 ))}

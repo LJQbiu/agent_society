@@ -410,7 +410,7 @@ export function useMcpCallTool() {
 export function useMessages(agentId: string, params?: { limit?: number }) {
   return useQuery({
     queryKey: ["messages", agentId, params],
-    queryFn: async () => { const data = await api.a2a.getMessages(agentId, params) as any; return data.messages || data || []; },
+    queryFn: async () => { const data = await api.a2a.getMessages(agentId, params); return data.messages || []; },
     enabled: !!agentId,
   });
 }

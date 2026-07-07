@@ -206,7 +206,7 @@ export function IdentityManager() {
             <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto">
 {`import requests
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "${window.location.origin}"
 CLIENT_ID = "${credential.client_id}"
 CLIENT_SECRET = "${credential.client_secret}"
 

@@ -4,17 +4,9 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/components/common/toast";
 import { useMessages, useSendMessage } from "@/hooks/use-queries";
+import type { A2AMessage } from "@/types";
 import { LoadingList, EmptyState, ErrorAlert, SuccessAlert } from "@/components/ui/status-components";
 import { cn } from "@/lib/utils";
-
-interface Message {
-  id: string;
-  from_agent_id: string;
-  to_agent_id: string;
-  content: string;
-  status: string;
-  created_at: string;
-}
 
 export function MessageCenter() {
   const { user } = useAuth();
@@ -22,7 +14,7 @@ export function MessageCenter() {
   const { data: messagesData, isLoading } = useMessages(user?.id || "");
   const sendMessage = useSendMessage();
 
-  const messages: Message[] = (messagesData as any)?.messages || (Array.isArray(messagesData) ? messagesData : []) || [];
+  const messages: A2AMessage[] = messagesData || [];
 
   const [recipientId, setRecipientId] = useState("");
   const [msgContent, setMsgContent] = useState("");
@@ -105,7 +97,7 @@ export function MessageCenter() {
         {!isLoading && messages.length > 0 && (
           <div className="space-y-3">
             {messages.map((msg, i) => (
-              <div key={msg.id || i} className="bg-gray-50 rounded-xl p-3 hover:bg-gray-100 transition-all">
+              <div key={msg.message_id || i} className="bg-gray-50 rounded-xl p-3 hover:bg-gray-100 transition-all">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <MessageCircle className="w-3.5 h-3.5 text-brand-500" />
@@ -119,7 +111,7 @@ export function MessageCenter() {
                     "bg-gray-100 text-gray-500"
                   )}>{msg.status}</span>
                 </div>
-                <p className="text-sm text-gray-700">{msg.content}</p>
+                <p className="text-sm text-gray-700">{msg.message_type}</p>
                 <p className="text-xs text-gray-400 mt-1">{msg.created_at?.slice(0, 19)}</p>
               </div>
             ))}

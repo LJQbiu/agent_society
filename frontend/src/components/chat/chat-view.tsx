@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAgents } from "@/hooks/use-queries";
 import type { AgentItem } from "@/types";
-import { LoadingList, EmptyState } from "@/components/ui/status-components";
+import { getWSBaseUrl } from "@/lib/ws";
+import { LoadingList, EmptyState, ErrorAlert } from "@/components/ui/status-components";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -18,7 +18,7 @@ interface ChatMessage {
 
 export function ChatView() {
   const { data: agentsData, isLoading: agentsLoading } = useAgents();
-  const agents: AgentItem[] = Array.isArray(agentsData) ? agentsData : (agentsData as any)?.agents || [];
+  const agents: AgentItem[] = agentsData?.agents || [];
 
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -35,50 +35,60 @@ export function ChatView() {
     }
   }, [messages]);
 
-  // ─── WebSocket Connection ───
-  const connect = useCallback(() => {
+  // ─── WebSocket Connection (带token认证,复用ws.ts基础设施) ───
+  const connect = useCallback(async () => {
     if (!selectedAgent) return;
     setConnecting(true);
 
-    const wsUrl = `ws://localhost:8080/ws/chat/${selectedAgent}`;
-    const ws = new WebSocket(wsUrl);
+    try {
+      // Fetch WS auth token (与主WS客户端相同认证流程)
+      const tokenRes = await fetch("/api/auth/ws-token", { method: "POST", credentials: "include" });
+      if (!tokenRes.ok) throw new Error(`认证失败: ${tokenRes.status}`);
+      const { ws_token } = await tokenRes.json();
 
-    ws.onopen = () => {
-      setConnected(true);
+      const wsUrl = `${getWSBaseUrl()}/ws/chat/${selectedAgent}?token=${ws_token}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setConnected(true);
+        setConnecting(false);
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: "system", content: "已连接到 Agent，开始对话", timestamp: Date.now() }]);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: "assistant",
+            content: data.content || data.message || event.data,
+            timestamp: Date.now(),
+          }]);
+        } catch {
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: "assistant",
+            content: event.data,
+            timestamp: Date.now(),
+          }]);
+        }
+      };
+
+      ws.onerror = () => {
+        setConnecting(false);
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: "system", content: "连接出错，请重试", timestamp: Date.now() }]);
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        setConnecting(false);
+      };
+
+      wsRef.current = ws;
+    } catch (err) {
       setConnecting(false);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "system", content: "已连接到 Agent，开始对话", timestamp: Date.now() }]);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: data.content || data.message || event.data,
-          timestamp: Date.now(),
-        }]);
-      } catch {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: event.data,
-          timestamp: Date.now(),
-        }]);
-      }
-    };
-
-    ws.onerror = () => {
-      setConnecting(false);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "system", content: "连接出错，请重试", timestamp: Date.now() }]);
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      setConnecting(false);
-    };
-
-    wsRef.current = ws;
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: "system", content: `连接失败: ${(err as Error).message}`, timestamp: Date.now() }]);
+    }
   }, [selectedAgent]);
 
   // Disconnect on agent change
