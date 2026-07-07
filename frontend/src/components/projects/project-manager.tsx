@@ -309,7 +309,7 @@ export default function ProjectManager() {
                   </div>
                 ))}
               </div>
-              <Link href={`/projects/chat/${selectedProjectId}`}
+              <Link href={`/projects/${selectedProjectId}/chat`}
                 className="text-brand-600 hover:text-brand-700 text-sm font-medium hover:underline">
                 打开完整聊天 →
               </Link>
