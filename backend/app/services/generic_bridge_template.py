@@ -105,6 +105,38 @@ async def fetch_society_context() -> str:
                         )
             except Exception as e:
                 ctx_parts.append(f"【Agent列表获取失败】: {e}")
+
+            # ── 项目概览 ──
+            try:
+                r_proj = await c.get(f"{PLATFORM_BASE}/projects/?include_inactive=true")
+                if r_proj.status_code == 200:
+                    projects = r_proj.json().get("projects", [])
+                    ctx_parts.append(f"\n【项目数量】: {len(projects)}")
+                    for proj in projects[:5]:
+                        pname = proj.get("name", "?")
+                        pid = proj.get("id", "?")[:20]
+                        pstatus = proj.get("status", "?")
+                        ctx_parts.append(f"  - {pname} ({pid}...) 状态:{pstatus}")
+
+                        # 每个项目的前几个TODO
+                        try:
+                            r_todo = await c.get(f"{PLATFORM_BASE}/project/{proj.get('id', '')}/todos")
+                            if r_todo.status_code == 200:
+                                todos = r_todo.json().get("todos", [])
+                                # 只显示 open / in_progress / claimed 的活跃TODO
+                                active_todos = [t for t in todos if t.get("status") in ("open", "claimed", "in_progress")]
+                                if active_todos:
+                                    ctx_parts.append(f"    活跃TODO({len(active_todos)}):")
+                                    for t in active_todos[:3]:
+                                        ctx_parts.append(
+                                            f"      - [{t.get('status','?')}] {t.get('title','?')} "
+                                            f"(优先级:{t.get('priority','?')})"
+                                        )
+                        except Exception:
+                            pass
+            except Exception as e:
+                ctx_parts.append(f"【项目获取失败】: {e}")
+
     except Exception as e:
         ctx_parts.append(f"【平台连接异常】: {e}")
     return "\n".join(ctx_parts) if ctx_parts else "平台数据暂不可用"

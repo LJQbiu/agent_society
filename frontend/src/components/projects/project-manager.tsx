@@ -38,7 +38,7 @@ export default function ProjectManager() {
 
   // ─── Mutations ───
   const { createProject, updateProject, joinProject, leaveProject,
-    updateProjectStatus, sendChatMessage, createTodo, updateTodo, claimTodo } = useProjectMutations();
+    updateProjectStatus, sendChatMessage, createTodo, updateTodo, claimTodo, deleteTodo } = useProjectMutations();
 
   // ─── Handlers ───
   const viewDetail = (id: string) => { setSelectedProjectId(id); setTab("detail"); };
@@ -324,6 +324,7 @@ export default function ProjectManager() {
               createTodo={createTodo}
               claimTodo={claimTodo}
               updateTodo={updateTodo}
+              deleteTodo={deleteTodo}
               hasAgents={!!myAgents?.agents?.length}
               onSuccessMsg={setSuccessMsg}
             />

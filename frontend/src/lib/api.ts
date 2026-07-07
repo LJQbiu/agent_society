@@ -249,6 +249,8 @@ class ApiClient {
       this.request<TodoListResponse>("GET", `/project/${projectId}/todos`),
     updateTodo: (projectId: string, todoId: string, data: TodoUpdate) =>
       this.request<ProjectTodoResponse>("PUT", `/project/${projectId}/todos/${todoId}`, data),
+    deleteTodo: (projectId: string, todoId: string) =>
+      this.request<{ ok: boolean; message: string }>("DELETE", `/project/${projectId}/todos/${todoId}`),
     claimTodo: (projectId: string, todoId: string, data: TodoClaimRequest) =>
       this.request<ProjectTodoResponse>("POST", `/project/${projectId}/todos/${todoId}/claim`, data),
   };

@@ -645,6 +645,26 @@ class ProjectService:
 
         return resp
 
+    async def delete_todo(self, project_id: str, todo_id: str, current_user) -> dict:
+        """Delete a TODO - only leader can delete"""
+        pid = UUID(project_id)
+        tid = UUID(todo_id)
+
+        result = await self.db.execute(
+            select(ProjectTodo).where(ProjectTodo.id == tid, ProjectTodo.project_id == pid)
+        )
+        todo = result.scalar_one_or_none()
+        if not todo:
+            raise ValueError("TODO not found")
+
+        is_leader = await self._is_leader_or_owner(pid, current_user)
+        if not is_leader:
+            raise ValueError("Only the project leader can delete a TODO")
+
+        await self.db.delete(todo)
+        await self.db.commit()
+        return {"ok": True, "message": "TODO deleted"}
+
     async def claim_todo(self, project_id: str, todo_id: str, req: TodoClaimRequest, current_user) -> ProjectTodoResponse:
         """Claim a TODO - any active participant can claim an open TODO"""
         pid = UUID(project_id)

@@ -273,6 +273,21 @@ async def update_todo(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.delete("/{project_id}/todos/{todo_id}")
+async def delete_todo(
+    project_id: str,
+    todo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """Delete a TODO - only leader can delete"""
+    service = ProjectService(db)
+    try:
+        return await service.delete_todo(project_id, todo_id, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/{project_id}/todos/{todo_id}/claim", response_model=ProjectTodoResponse)
 async def claim_todo(
     project_id: str,

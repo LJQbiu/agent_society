@@ -320,6 +320,11 @@ export function useProjectMutations() {
       mutationFn: ({ id, todoId, data }: { id: string; todoId: string; data: TodoClaimRequest }) => api.projects.claimTodo(id, todoId, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectTodos", vars.id] }),
     }),
+    deleteTodo: useMutation({
+      mutationFn: ({ id, todoId }: { id: string; todoId: string }) =>
+        api.projects.deleteTodo(id, todoId),
+      onSuccess: (_data: unknown, vars) => qc.invalidateQueries({ queryKey: ["projectTodos", vars.id] }),
+    }),
   };
 }
 
