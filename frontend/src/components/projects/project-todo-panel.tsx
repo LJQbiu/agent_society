@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/status-components";
+import type { TodoCreate, TodoUpdate, TodoClaimRequest, MutationAction, SimpleMutation } from "@/types";
 
 interface TodoItem {
   id: string;
@@ -21,9 +22,9 @@ interface ProjectTodoPanelProps {
   projectId: string;
   agentId: string | undefined;
   todoBorderColor: (s: string) => string;
-  createTodo: { mutate: (vars: any, opts?: any) => void };
-  claimTodo: { mutate: (vars: any) => void };
-  updateTodo: { mutate: (vars: any) => void };
+  createTodo: MutationAction<{ id: string; data: TodoCreate }>;
+  claimTodo: SimpleMutation<{ id: string; todoId: string; data: TodoClaimRequest }>;
+  updateTodo: SimpleMutation<{ id: string; todoId: string; data: TodoUpdate }>;
   hasAgents: boolean;
   onSuccessMsg: (msg: string) => void;
 }
@@ -38,7 +39,7 @@ export function ProjectTodoPanel({
   const handleCreateTodo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectId || !agentId) return;
-    createTodo.mutate({ id: projectId, data: { ...todoForm, creator_agent_id: agentId } }, {
+    createTodo.mutate({ id: projectId, data: todoForm as TodoCreate }, {
       onSuccess: () => { setTodoForm({ title: "", description: "", priority: "medium" }); setShowTodoForm(false); onSuccessMsg("TODO已创建！"); },
     });
   };
@@ -50,7 +51,7 @@ export function ProjectTodoPanel({
 
   const handleUpdateTodoStatus = (todoId: string, status: string) => {
     if (!projectId || !agentId) return;
-    updateTodo.mutate({ id: projectId, todoId, data: { status, agent_id: agentId } });
+    updateTodo.mutate({ id: projectId, todoId, data: { status: status as "open" | "in_progress" | "completed" | "cancelled", agent_id: agentId } });
   };
 
   return (

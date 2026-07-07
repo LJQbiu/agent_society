@@ -25,7 +25,7 @@ export function MessageCenter() {
       return;
     }
     sendMessage.mutate(
-      { to_agent_id: recipientId, content: msgContent },
+      { from_agent_id: user?.id || "", to_agent_id: recipientId, content: { text: msgContent }, message_type: "text" },
       {
         onSuccess: () => {
           showToast("消息已发送", "success");

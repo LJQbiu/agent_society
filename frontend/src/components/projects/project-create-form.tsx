@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import type { ProjectCreateRequest } from "@/types";
+import type { ProjectCreateRequest, MutationAction } from "@/types";
 
 interface ProjectCreateFormProps {
-  createProject: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
+  createProject: MutationAction<ProjectCreateRequest>;
   onCreated: (projectId: string) => void;
   onSuccessMsg: (msg: string) => void;
 }
@@ -45,7 +45,7 @@ export function ProjectCreateForm({ createProject, onCreated, onSuccessMsg }: Pr
         <textarea value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
           className="border border-gray-200 p-2.5 rounded-lg w-full focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all" rows={3} />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block font-medium text-gray-700 mb-1">类型</label>
           <select value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))}
@@ -62,7 +62,7 @@ export function ProjectCreateForm({ createProject, onCreated, onSuccessMsg }: Pr
             className="border border-gray-200 p-2.5 rounded-lg w-full focus:border-brand-500" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block font-medium text-gray-700 mb-1">预算</label>
           <input type="number" value={createForm.budget}

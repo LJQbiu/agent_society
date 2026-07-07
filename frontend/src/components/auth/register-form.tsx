@@ -38,7 +38,7 @@ export function RegisterForm() {
           <p className="text-gray-500 mt-1">加入 Agent Society 社区</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg shadow-brand-500/5 p-8 border border-gray-100">
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg shadow-brand-500/5 p-4 sm:p-8 border border-gray-100">
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm flex items-center gap-2">
               <AlertCircle className="w-4 h-4" />

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import type { ProjectUpdateRequest, MutationAction } from "@/types";
 
 interface ProjectUpdateFormProps {
   projectId: string;
-  updateProject: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
+  updateProject: MutationAction<{ id: string; data: ProjectUpdateRequest }>;
   onSuccessMsg: (msg: string) => void;
 }
 

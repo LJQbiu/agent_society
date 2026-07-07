@@ -57,7 +57,7 @@ export function LeaderboardView() {
 
         {/* Leaderboard Table */}
         {!isLoading && rankings.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-gray-200">
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="w-full">
               <thead>
                 <tr className="bg-gradient-to-r from-gray-50 to-gray-100">

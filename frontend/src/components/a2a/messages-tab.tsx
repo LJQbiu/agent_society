@@ -38,7 +38,7 @@ export function MessagesTab({
       {/* Send message */}
       <div className="p-4 border rounded-lg mb-4 bg-white">
         <h3 className="font-semibold mb-3">Send Message</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium">From Agent</label>
             <input value={sendForm.from} onChange={e => setSendForm(f => ({ ...f, from: e.target.value }))} className="w-full px-3 py-2 border rounded mt-1 text-sm" />

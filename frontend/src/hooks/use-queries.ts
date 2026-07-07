@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import type { OrganizationCreateRequest, OrganizationUpdateRequest, JoinOrgRequest, ProjectCreateRequest, ProjectUpdateRequest, TodoCreate, TodoUpdate, TodoClaimRequest, A2AMessageSend, DepositRequest, TransferRequest, ChatMessageCreate, StatusTransitionRequest } from "@/types";
 
 // ─── Query Key工厂 ───
 export const queryKeys = {
@@ -149,7 +150,7 @@ export function useIdentityMutations() {
   const qc = useQueryClient();
   return {
     updateProfile: useMutation({
-      mutationFn: (data: any) => api.identity.updateProfile(data),
+      mutationFn: (data: Record<string, unknown>) => api.identity.updateProfile(data),
       onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
     }),
     agentCredentials: useMutation({
@@ -284,39 +285,39 @@ export function useProjectMutations() {
   const qc = useQueryClient();
   return {
     createProject: useMutation({
-      mutationFn: (data: any) => api.projects.create(data),
+      mutationFn: (data: ProjectCreateRequest) => api.projects.create(data),
       onSuccess: () => qc.invalidateQueries({ queryKey: ["projectCrudList"] }),
     }),
     updateProject: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: any }) => api.projects.update(id, data),
+      mutationFn: ({ id, data }: { id: string; data: ProjectUpdateRequest }) => api.projects.update(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectCrudDetail", vars.id] }),
     }),
     joinProject: useMutation({
-      mutationFn: ({ id, data }: { id: string; data?: any }) => api.projects.join(id, data),
+      mutationFn: ({ id, data }: { id: string; data?: Record<string, unknown> }) => api.projects.join(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectCrudDetail", vars.id] }),
     }),
     leaveProject: useMutation({
-      mutationFn: ({ id, data }: { id: string; data?: any }) => api.projects.leave(id, data),
+      mutationFn: ({ id, data }: { id: string; data?: Record<string, unknown> }) => api.projects.leave(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectCrudDetail", vars.id] }),
     }),
     updateProjectStatus: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: any }) => api.projects.updateStatus(id, data),
+      mutationFn: ({ id, data }: { id: string; data: StatusTransitionRequest }) => api.projects.updateStatus(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectCrudDetail", vars.id] }),
     }),
     sendChatMessage: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: any }) => api.projects.sendChatMessage(id, data),
+      mutationFn: ({ id, data }: { id: string; data: ChatMessageCreate }) => api.projects.sendChatMessage(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectChatMessages", vars.id] }),
     }),
     createTodo: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: any }) => api.projects.createTodo(id, data),
+      mutationFn: ({ id, data }: { id: string; data: TodoCreate }) => api.projects.createTodo(id, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectTodos", vars.id] }),
     }),
     updateTodo: useMutation({
-      mutationFn: ({ id, todoId, data }: { id: string; todoId: string; data: any }) => api.projects.updateTodo(id, todoId, data),
+      mutationFn: ({ id, todoId, data }: { id: string; todoId: string; data: TodoUpdate }) => api.projects.updateTodo(id, todoId, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectTodos", vars.id] }),
     }),
     claimTodo: useMutation({
-      mutationFn: ({ id, todoId, data }: { id: string; todoId: string; data: any }) => api.projects.claimTodo(id, todoId, data),
+      mutationFn: ({ id, todoId, data }: { id: string; todoId: string; data: TodoClaimRequest }) => api.projects.claimTodo(id, todoId, data),
       onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["projectTodos", vars.id] }),
     }),
   };
@@ -329,14 +330,14 @@ export function useOrgMutations() {
   const qc = useQueryClient();
   return {
     createOrg: useMutation({
-      mutationFn: (data: any) => api.organizations.create(data),
+      mutationFn: (data: OrganizationCreateRequest) => api.organizations.create(data),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["organizations"] });
         qc.invalidateQueries({ queryKey: ["orgCrudList"] });
       },
     }),
     updateOrg: useMutation({
-      mutationFn: ({ id, data }: { id: string; data: any }) => api.organizations.update(id, data),
+      mutationFn: ({ id, data }: { id: string; data: OrganizationUpdateRequest }) => api.organizations.update(id, data),
       onSuccess: (_data, vars) => {
         qc.invalidateQueries({ queryKey: ["organizations"] });
         qc.invalidateQueries({ queryKey: ["orgCrudList"] });
@@ -344,7 +345,7 @@ export function useOrgMutations() {
       },
     }),
     joinOrg: useMutation({
-      mutationFn: ({ orgId, data }: { orgId: string; data: any }) => api.organizations.join(orgId, data),
+      mutationFn: ({ orgId, data }: { orgId: string; data: JoinOrgRequest }) => api.organizations.join(orgId, data),
       onSuccess: (_data, vars) => {
         qc.invalidateQueries({ queryKey: ["organizations"] });
         qc.invalidateQueries({ queryKey: ["orgCrudList"] });
@@ -361,7 +362,7 @@ export function useAgentMutations() {
   const qc = useQueryClient();
   return {
     registerAgent: useMutation({
-      mutationFn: (data: any) => api.identity.registerAgent(data),
+      mutationFn: (data: { agent_id: string; name: string; description: string; capabilities: string[]; endpoints?: Record<string, string> }) => api.identity.registerAgent(data),
       onSuccess: () => qc.invalidateQueries({ queryKey: ["myAgents"] }),
     }),
     bindAgent: useMutation({
@@ -400,7 +401,7 @@ export function useMcpResources() {
 /** MCP调用工具 mutation */
 export function useMcpCallTool() {
   return useMutation({
-    mutationFn: ({ toolName, args }: { toolName: string; args: any }) => api.mcp.callTool(toolName, args),
+      mutationFn: ({ toolName, args }: { toolName: string; args: Record<string, unknown> }) => api.mcp.callTool(toolName, args),
   });
 }
 
@@ -419,7 +420,7 @@ export function useMessages(agentId: string, params?: { limit?: number }) {
 export function useSendMessage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: any) => api.a2a.sendMessage(data),
+    mutationFn: (data: A2AMessageSend) => api.a2a.sendMessage(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["messages"] }),
   });
 }
@@ -429,14 +430,14 @@ export function useSettlementMutations() {
   const qc = useQueryClient();
   return {
     deposit: useMutation({
-      mutationFn: (data: any) => api.settlement.deposit(data),
+      mutationFn: (data: DepositRequest) => api.settlement.deposit(data),
       onSuccess: (_data, variables) => {
         qc.invalidateQueries({ queryKey: ["balance"] });
         qc.invalidateQueries({ queryKey: ["transactions"] });
       },
     }),
     transfer: useMutation({
-      mutationFn: (data: any) => api.settlement.transfer(data),
+      mutationFn: (data: TransferRequest) => api.settlement.transfer(data),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["balance"] });
         qc.invalidateQueries({ queryKey: ["transactions"] });

@@ -77,7 +77,7 @@ export function WalletView() {
           <svg className="w-5 h-5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="7" y2="17" x2="17" y1="7" /><polyline points="7 7 17 7 17 17" /></svg>
           转账
         </h2>
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">接收方</label>
             <input

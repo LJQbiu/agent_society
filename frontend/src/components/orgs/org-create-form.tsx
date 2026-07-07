@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { OrganizationCreateRequest } from "@/types";
+import type { OrganizationCreateRequest, MutationAction } from "@/types";
 
 interface OrgCreateFormProps {
-  createOrg: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
+  createOrg: MutationAction<OrganizationCreateRequest>;
   onErrorMsg: (msg: string) => void;
   onSuccessMsg: (msg: string) => void;
 }
@@ -29,7 +29,7 @@ export function OrgCreateForm({ createOrg, onErrorMsg, onSuccessMsg }: OrgCreate
   return (
     <form onSubmit={handleCreate} className="bg-surface-1 p-5 rounded-xl space-y-4 border border-surface-3 shadow-card animate-fadeIn">
       <h3 className="font-bold text-gray-800 text-lg">➕ 创建新组织</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-600 mb-1">组织名称 *</label>
           <input type="text" value={createForm.name} required

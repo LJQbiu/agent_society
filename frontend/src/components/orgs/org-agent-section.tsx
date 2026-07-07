@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import type { JoinOrgRequest, MutationAction } from "@/types";
 
 interface AgentInfo { id: string; name: string }
 
 interface OrgAgentSectionProps {
   orgId: string;
   myAgents: AgentInfo[];
-  joinOrg: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
-  registerAgent: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
+  joinOrg: MutationAction<{ orgId: string; data: JoinOrgRequest }>;
+  registerAgent: MutationAction<{ agent_id: string; name: string; description: string; capabilities: string[]; endpoints?: Record<string, string> }>;
   onErrorMsg: (msg: string) => void;
   onSuccessMsg: (msg: string) => void;
 }
@@ -31,7 +32,12 @@ export function OrgAgentSection({ orgId, myAgents, joinOrg, registerAgent, onErr
   const handleRegisterAgent = (e: React.FormEvent) => {
     e.preventDefault();
     onErrorMsg(""); onSuccessMsg("");
-    registerAgent.mutate(agentForm, {
+    registerAgent.mutate({
+      agent_id: agentForm.name.toLowerCase().replace(/\s+/g, "_"),
+      name: agentForm.name,
+      description: agentForm.description,
+      capabilities: agentForm.capabilities.split(",").map(c => c.trim()).filter(Boolean),
+    }, {
       onSuccess: () => { setShowRegisterAgent(false); onSuccessMsg("Agent注册成功！"); setAgentForm({ name: "", description: "", capabilities: "", type: "assistant" }); },
       onError: (err: Error) => onErrorMsg(err.message || "注册Agent失败"),
     });
@@ -63,7 +69,7 @@ export function OrgAgentSection({ orgId, myAgents, joinOrg, registerAgent, onErr
       {showRegisterAgent && (
         <form onSubmit={handleRegisterAgent} className="bg-surface-1 p-4 rounded-xl space-y-3 border border-surface-3 animate-fadeIn">
           <h4 className="font-bold text-gray-700">注册新Agent</h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Agent名称 *</label>
               <input type="text" value={agentForm.name} required
@@ -77,7 +83,7 @@ export function OrgAgentSection({ orgId, myAgents, joinOrg, registerAgent, onErr
                 className="w-full border border-surface-3 rounded-lg px-3 py-2 focus:border-brand-500 outline-none transition" rows={2} placeholder="描述Agent功能..." />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">能力(逗号分隔)</label>
               <input type="text" value={agentForm.capabilities}

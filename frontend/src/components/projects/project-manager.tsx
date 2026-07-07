@@ -61,7 +61,7 @@ export default function ProjectManager() {
 
   const handleStatusTransition = (projectId: string) => {
     if (!newStatus) return;
-    updateProjectStatus.mutate({ id: projectId, data: { new_status: newStatus } }, {
+    updateProjectStatus.mutate({ id: projectId, data: { new_status: newStatus as "recruiting" | "active" | "suspended" | "completed" | "revoked" } }, {
       onSuccess: () => { setNewStatus(""); setSuccessMsg("状态已更新！"); },
     });
   };

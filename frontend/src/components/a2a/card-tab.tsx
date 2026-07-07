@@ -53,7 +53,7 @@ export function CardTab({
             </button>
           </div>
           <p className="mb-3">{agentCard.description}</p>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div><strong>Status:</strong> <span className={agentCard.status === "active" ? "text-green-600" : "text-gray-500"}>{agentCard.status}</span></div>
             <div><strong>Reputation:</strong> {agentCard.reputation}</div>
             <div><strong>Trust Level:</strong> {agentCard.trust_level}</div>

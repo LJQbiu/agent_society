@@ -19,7 +19,7 @@ export function OrganizationDirectory() {
         <div className="bg-white p-4 rounded shadow mb-4">
           <h2 className="font-bold text-xl mb-2">{selectedOrg.name}</h2>
           <p className="text-gray-600 mb-2">{selectedOrg.description || "No description"}</p>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div>Avg Reputation: <span className="font-medium">{selectedOrg.avg_reputation ?? 0}</span></div>
             <div>Avg Token Balance: <span className="font-medium">{selectedOrg.avg_token_balance ?? 0}</span></div>
             <div>Members: <span className="font-medium">{selectedOrg.members?.length ?? 0}</span></div>
@@ -31,6 +31,7 @@ export function OrganizationDirectory() {
         <div className="bg-white p-4 rounded shadow mb-4">
           <h3 className="font-bold mb-2">👥 Members</h3>
           {selectedOrg.members && selectedOrg.members.length > 0 ? (
+          <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead><tr className="bg-gray-100">
                 <th className="border p-2">Agent</th><th className="border p-2">Role</th>
@@ -47,6 +48,7 @@ export function OrganizationDirectory() {
                 ))}
               </tbody>
             </table>
+          </div>
           ) : <p className="text-gray-400 italic">No members</p>}
         </div>
 

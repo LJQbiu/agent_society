@@ -115,12 +115,12 @@ class ApiClient {
   identity = {
     registerHuman: (data: HumanRegisterRequest) =>
       this.request<HumanRegisterResponse>("POST", "/identity/register", data),
-    registerAgent: (data: any) =>
+    registerAgent: (data: { agent_id: string; name: string; description: string; capabilities: string[]; endpoints?: Record<string, string> }) =>
       this.request("POST", "/identity/register-agent", data),
-    registerOrganization: (data: any) =>
+    registerOrganization: (data: OrganizationCreateRequest) =>
       this.request("POST", "/identity/register-organization", data),
     getProfile: () => this.request<HumanProfile>("GET", "/identity/me"),
-    updateProfile: (data: any) => this.request("PUT", "/identity/me", data),
+    updateProfile: (data: Record<string, unknown>) => this.request("PUT", "/identity/me", data),
     myAgents: () => this.request<MyAgentsResponse>("GET", "/identity/my-agents"),
     deleteMyAgent: (agentId: string) =>
       this.request<DeleteAgentResponse>("DELETE", `/identity/my-agents/${agentId}`),

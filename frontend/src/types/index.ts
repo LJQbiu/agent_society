@@ -1,5 +1,16 @@
 /** 前端类型定义 - 对齐后端Schema */
 
+/** Mutation action类型 - 用于组件props，避免UseMutationResult过重 */
+export interface MutationAction<TVariables = void> {
+  mutate: (variables: TVariables, opts?: { onSuccess?: (data: unknown) => void; onError?: (error: Error) => void }) => void;
+  isPending: boolean;
+}
+
+/** 简化Mutation类型 - 仅mutate，无opts无isPending */
+export interface SimpleMutation<TVariables = void> {
+  mutate: (variables: TVariables) => void;
+}
+
 // === Human Profile (used by AuthProvider) ===
 export interface HumanProfile {
   id: string;
@@ -508,6 +519,7 @@ export interface TodoUpdate {
   description?: string;
   priority?: "low" | "medium" | "high" | "critical";
   status?: "open" | "in_progress" | "completed" | "cancelled";
+  agent_id?: string;
 }
 
 export interface TodoClaimRequest {

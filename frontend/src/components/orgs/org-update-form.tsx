@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { OrganizationCRUDResponse } from "@/types";
+import type { OrganizationUpdateRequest, OrganizationCRUDResponse, MutationAction } from "@/types";
 
 interface OrgUpdateFormProps {
   selectedOrg: OrganizationCRUDResponse;
   orgId: string;
-  updateOrg: { mutate: (vars: any, opts?: any) => void; isPending: boolean };
+  updateOrg: MutationAction<{ id: string; data: OrganizationUpdateRequest }>;
   onErrorMsg: (msg: string) => void;
   onSuccessMsg: (msg: string) => void;
 }
@@ -27,7 +27,7 @@ export function OrgUpdateForm({ selectedOrg, orgId, updateOrg, onErrorMsg, onSuc
   return (
     <form onSubmit={handleUpdate} className="space-y-3">
       <h4 className="font-medium text-gray-700">📝 更新组织信息</h4>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-600 mb-1">名称</label>
           <input type="text" value={updateForm.name || selectedOrg.name || ""}
