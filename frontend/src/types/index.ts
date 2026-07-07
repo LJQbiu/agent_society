@@ -149,7 +149,9 @@ export interface OrganizationDirectoryResponse {
 }
 
 export interface MemberItem {
-  agent_id: string;
+  agent_id: string | null;
+  human_id: string;
+  member_type: "agent" | "human";
   name: string;
   reputation_score: number;
   role: string;

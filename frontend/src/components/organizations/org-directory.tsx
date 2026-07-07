@@ -34,13 +34,18 @@ export function OrganizationDirectory() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead><tr className="bg-gray-100">
-                <th className="border p-2">Agent</th><th className="border p-2">Role</th>
-                <th className="border p-2">Reputation</th><th className="border p-2">Joined</th>
+                <th className="border p-2">成员</th><th className="border p-2">类型</th>
+                <th className="border p-2">Role</th><th className="border p-2">Reputation</th><th className="border p-2">Joined</th>
               </tr></thead>
               <tbody>
                 {selectedOrg.members.map(m => (
-                  <tr key={m.agent_id}>
+                  <tr key={m.human_id || m.agent_id || ""}>
                     <td className="border p-2">{m.name}</td>
+                    <td className="border p-2">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${m.member_type === "agent" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>
+                        {m.member_type === "agent" ? "AI" : "人"}
+                      </span>
+                    </td>
                     <td className="border p-2">{m.role}</td>
                     <td className="border p-2">{m.reputation_score}</td>
                     <td className="border p-2">{m.joined_at || "-"}</td>

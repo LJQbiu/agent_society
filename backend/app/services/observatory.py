@@ -3,6 +3,7 @@ from sqlalchemy import select, func, desc, asc, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.models.agent import Agent
+from app.models.human import Human
 from app.models.organization import Organization, OrganizationMember
 from app.models.project import Project, ProjectParticipant
 from app.models.transaction import Transaction
@@ -360,29 +361,65 @@ class ObservatoryService:
         if not org:
             return {"error": "Organization not found"}
 
-        # Members with agent info
+        # Members with agent/human info (LEFT JOIN to include human members without agent_id)
         members_rows = await self.db.execute(
-            select(OrganizationMember, Agent.name, Agent.reputation) \
-            .join(Agent, OrganizationMember.agent_id == Agent.id) \
-            .where(OrganizationMember.organization_id == oid) \
+            select(
+                OrganizationMember,
+                Agent.name.label("agent_name"),
+                Agent.reputation.label("agent_rep"),
+                Agent.balance.label("agent_bal"),
+                Human.username.label("human_name"),
+            )
+            .outerjoin(Agent, OrganizationMember.agent_id == Agent.id)
+            .outerjoin(Human, OrganizationMember.human_id == Human.id)
+            .where(OrganizationMember.organization_id == oid)
             .where(OrganizationMember.status == "active")
         )
         members = []
         total_rep = 0.0
         total_bal = 0.0
         for m_row in members_rows.all():
-            om, agent_name, agent_rep = m_row[0], m_row[1], m_row[2]
-            # Get agent balance too
-            agent_obj = await self.db.get(Agent, om.agent_id)
+            om = m_row[0]
+            agent_name = m_row.agent_name
+            agent_rep = m_row.agent_rep
+            agent_bal = m_row.agent_bal
+            human_name = m_row.human_name
+            # Name: prefer agent name, fallback to human username
+            display_name = agent_name or human_name or str(om.human_id)
+            member_type = "agent" if om.agent_id else "human"
             members.append({
-                "agent_id": str(om.agent_id),
-                "name": agent_name,
+                "agent_id": str(om.agent_id) if om.agent_id else None,
+                "human_id": str(om.human_id),
+                "member_type": member_type,
+                "name": display_name,
                 "reputation_score": agent_rep or 0.0,
                 "role": om.role,
                 "joined_at": om.created_at.isoformat() if om.created_at else None,
             })
             total_rep += (agent_rep or 0.0)
-            total_bal += (agent_obj.balance if agent_obj else 0.0)
+            total_bal += (agent_bal or 0.0)
+
+        # Also include agents owned by human org members (implicit membership)
+        existing_agent_ids = {m["agent_id"] for m in members if m["agent_id"]}
+        human_ids_in_org = {m["human_id"] for m in members}
+        if human_ids_in_org:
+            owned_agents = await self.db.scalars(
+                select(Agent).where(Agent.owner_id.in_(human_ids_in_org))
+            )
+            for a in owned_agents.all():
+                if str(a.id) not in existing_agent_ids:
+                    members.append({
+                        "agent_id": str(a.id),
+                        "human_id": str(a.owner_id),
+                        "member_type": "agent",
+                        "name": a.name,
+                        "reputation_score": a.reputation or 0.0,
+                        "role": "member",
+                        "joined_at": a.created_at.isoformat() if a.created_at else None,
+                    })
+                    existing_agent_ids.add(str(a.id))
+                    total_rep += a.reputation or 0.0
+                    total_bal += a.balance or 0.0
 
         # Associated projects
         proj_rows = await self.db.scalars(

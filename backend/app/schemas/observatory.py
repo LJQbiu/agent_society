@@ -100,7 +100,9 @@ class OrganizationDirectoryResponse(BaseModel):
 
 
 class MemberItem(BaseModel):
-    agent_id: str
+    agent_id: Optional[str] = None
+    human_id: str
+    member_type: str  # "agent" or "human"
     name: str
     reputation_score: float = 0.0
     role: str
