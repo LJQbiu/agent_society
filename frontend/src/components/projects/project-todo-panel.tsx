@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/status-components";
-import type { TodoCreate, TodoUpdate, TodoClaimRequest, MutationAction, SimpleMutation } from "@/types";
+import type { TodoCreate, TodoUpdate, TodoClaimRequest, MutationAction, SimpleMutation, ProjectParticipantResponse } from "@/types";
 
 interface TodoItem {
   id: string;
@@ -21,6 +21,7 @@ interface ProjectTodoPanelProps {
   todos: TodoItem[];
   projectId: string;
   agentId: string | undefined;
+  participants: ProjectParticipantResponse[];
   todoBorderColor: (s: string) => string;
   createTodo: MutationAction<{ id: string; data: TodoCreate }>;
   claimTodo: SimpleMutation<{ id: string; todoId: string; data: TodoClaimRequest }>;
@@ -31,11 +32,12 @@ interface ProjectTodoPanelProps {
 }
 
 export function ProjectTodoPanel({
-  todos, projectId, agentId, todoBorderColor,
+  todos, projectId, agentId, participants, todoBorderColor,
   createTodo, claimTodo, updateTodo, deleteTodo, hasAgents, onSuccessMsg,
 }: ProjectTodoPanelProps) {
   const [showTodoForm, setShowTodoForm] = useState(false);
   const [todoForm, setTodoForm] = useState({ title: "", description: "", priority: "medium" });
+  const [claimAgentId, setClaimAgentId] = useState<string>("");
 
   // Edit state per todo
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
@@ -47,14 +49,17 @@ export function ProjectTodoPanel({
   const handleCreateTodo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectId || !agentId) return;
-    createTodo.mutate({ id: projectId, data: todoForm as TodoCreate }, {
-      onSuccess: () => { setTodoForm({ title: "", description: "", priority: "medium" }); setShowTodoForm(false); onSuccessMsg("TODO已创建！"); },
-    });
+    createTodo.mutateAsync({ id: projectId, data: todoForm as TodoCreate })
+      .then(() => { setTodoForm({ title: "", description: "", priority: "medium" }); setShowTodoForm(false); onSuccessMsg("TODO已创建！"); });
   };
 
   const handleClaimTodo = (todoId: string) => {
-    if (!projectId || !agentId) return;
-    claimTodo.mutate({ id: projectId, todoId, data: { claimer_type: "agent", agent_id: agentId } });
+    if (!projectId) return;
+    const targetAgentId = claimAgentId || agentId;
+    if (!targetAgentId) return;
+    claimTodo.mutate({ id: projectId, todoId, data: { claimer_type: "agent", agent_id: targetAgentId } });
+    setClaimAgentId("");
+    onSuccessMsg("TODO已认领！");
   };
 
   const handleUpdateTodoStatus = (todoId: string, status: string) => {
@@ -73,16 +78,14 @@ export function ProjectTodoPanel({
 
   const handleEditSave = (todoId: string) => {
     if (!projectId || !editForm.title.trim()) return;
-    updateTodo.mutate({ id: projectId, todoId, data: { title: editForm.title.trim(), description: editForm.description, priority: editForm.priority } }, {
-      onSuccess: () => { setEditingTodoId(null); onSuccessMsg("TODO已更新！"); },
-    });
+    updateTodo.mutateAsync({ id: projectId, todoId, data: { title: editForm.title.trim(), description: editForm.description, priority: editForm.priority } })
+      .then(() => { setEditingTodoId(null); onSuccessMsg("TODO已更新！"); });
   };
 
   const handleDeleteConfirm = (todoId: string) => {
     if (!projectId) return;
-    deleteTodo.mutate({ id: projectId, todoId }, {
-      onSuccess: () => { setDeletingTodoId(null); onSuccessMsg("TODO已删除！"); },
-    });
+    deleteTodo.mutateAsync({ id: projectId, todoId })
+      .then(() => { setDeletingTodoId(null); onSuccessMsg("TODO已删除！"); });
   };
 
   return (
@@ -167,10 +170,22 @@ export function ProjectTodoPanel({
                   <div className="flex gap-1 flex-shrink-0">
                     {/* 状态操作按钮 */}
                     {todo.status === "open" && (
-                      <button onClick={() => handleClaimTodo(todo.id)}
-                        className="bg-blue-500 text-white px-2 py-1 rounded-lg text-xs hover:bg-blue-600 transition-all shadow-sm">
-                        🤝 认领
-                      </button>
+                      <div className="flex gap-1 items-center">
+                        <select value={claimAgentId} onChange={e => setClaimAgentId(e.target.value)}
+                          className="border border-gray-200 p-1 rounded text-xs max-w-[120px]">
+                          <option value="">选择agent...</option>
+                          {participants.filter(p => p.status === "active").map(p => (
+                            <option key={p.agent_id} value={p.agent_id}>
+                              {p.agent_name || p.agent_id.slice(0,8)}
+                            </option>
+                          ))}
+                        </select>
+                        <button onClick={() => handleClaimTodo(todo.id)}
+                          className="bg-blue-500 text-white px-2 py-1 rounded-lg text-xs hover:bg-blue-600 transition-all shadow-sm disabled:opacity-50"
+                          disabled={!claimAgentId && !agentId}>
+                          🤝 认领
+                        </button>
+                      </div>
                     )}
                     {todo.status === "claimed" && (
                       <button onClick={() => handleUpdateTodoStatus(todo.id, "in_progress")}

@@ -2,7 +2,8 @@
 
 /** Mutation action类型 - 用于组件props，避免UseMutationResult过重 */
 export interface MutationAction<TVariables = void> {
-  mutate: (variables: TVariables, opts?: { onSuccess?: (data: unknown) => void; onError?: (error: Error) => void }) => void;
+  mutate: (variables: TVariables) => void;
+  mutateAsync: (variables: TVariables) => Promise<unknown>;
   isPending: boolean;
 }
 
@@ -423,6 +424,7 @@ export interface ProjectCreateRequest {
   name: string;
   description?: string;
   type?: string;
+  status?: string;
   budget?: number;
   reputation_budget?: number;
   required_capabilities?: string[];

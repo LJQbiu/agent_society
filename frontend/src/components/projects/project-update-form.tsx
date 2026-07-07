@@ -15,9 +15,8 @@ export function ProjectUpdateForm({ projectId, updateProject, onSuccessMsg }: Pr
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectId) return;
-    updateProject.mutate({ id: projectId, data: updateForm }, {
-      onSuccess: () => { setUpdateForm({}); onSuccessMsg("项目更新成功！"); },
-    });
+    updateProject.mutateAsync({ id: projectId, data: updateForm })
+      .then(() => { setUpdateForm({}); onSuccessMsg("项目更新成功！"); });
   };
 
   return (

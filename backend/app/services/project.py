@@ -89,7 +89,7 @@ class ProjectService:
             name=req.name,
             description=req.description,
             type=req.type,
-            status="recruiting",
+            status=req.status,
             budget=req.budget,
             reputation_budget=req.reputation_budget,
             required_capabilities=req.required_capabilities,

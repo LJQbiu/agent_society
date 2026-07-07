@@ -32,21 +32,14 @@ GENERIC_BRIDGE_SCRIPT = os.path.join(
 )
 
 
-def _get_bridge_url(agent_id: str | None) -> str | None:
-    """Match agent_id to bridge URL by name substring.
-    
-    Order: 1) Dedicated bridge  2) Previously spawned generic bridge
-    """
-    if not agent_id:
-        return None
-    # 1. Check dedicated bridges
-    for name, url in BRIDGE_URLS.items():
-        if name in agent_id:
-            return url
-    # 2. Check spawned generic bridges
-    if agent_id in _spawned_bridges:
-        return _spawned_bridges[agent_id]["url"]
-    return None
+async def _check_bridge_health(url: str) -> bool:
+    """Check if a bridge URL is reachable and healthy."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{url}/health")
+            return resp.status_code == 200
+    except Exception:
+        return False
 
 
 async def _spawn_generic_bridge(agent_id: str) -> str:
@@ -65,6 +58,12 @@ async def _spawn_generic_bridge(agent_id: str) -> str:
     
     logger.info(f"[AutoSpawn] Spawning generic bridge for {agent_id} on port {port}")
     
+    # Redirect stdout/stderr to log files (PIPE causes 64KB buffer overflow → bridge hangs)
+    BRIDGE_LOG_DIR = "/tmp/bridge_logs"
+    os.makedirs(BRIDGE_LOG_DIR, exist_ok=True)
+    log_path = os.path.join(BRIDGE_LOG_DIR, f"{agent_name}_port{port}.log")
+    log_file = open(log_path, "a")
+
     # Launch the generic bridge template as a subprocess
     process = subprocess.Popen(
         [
@@ -73,8 +72,8 @@ async def _spawn_generic_bridge(agent_id: str) -> str:
             "--port", str(port),
             "--agent_name", agent_name,
         ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=log_file,
+        stderr=log_file,
         # Detach from parent process group so backend restart doesn't kill bridges
         start_new_session=True,
     )
@@ -106,29 +105,44 @@ async def _spawn_generic_bridge(agent_id: str) -> str:
     raise RuntimeError(f"Generic bridge for {agent_id} failed to start")
 
 
+async def _resolve_bridge_url(agent_id: str | None) -> str | None:
+    """Resolve bridge URL with health check and auto-spawn fallback.
+    
+    Flow: 1) Spawned generic bridge → 2) Dedicated bridge (with health check) → 3) Auto-spawn generic
+    """
+    if not agent_id:
+        return None
+    
+    # 1. Check previously spawned generic bridges
+    if agent_id in _spawned_bridges:
+        return _spawned_bridges[agent_id]["url"]
+    
+    # 2. Check dedicated bridges (with health check)
+    for name, url in BRIDGE_URLS.items():
+        if name in agent_id:
+            if await _check_bridge_health(url):
+                logger.info(f"[BridgeRouter] Using healthy dedicated bridge for {agent_id}: {url}")
+                return url
+            else:
+                logger.warning(f"[BridgeRouter] Dedicated bridge for {name} at {url} unreachable, falling back to auto-spawn")
+                break  # Don't try other dedicated URLs
+    
+    # 3. Auto-spawn generic bridge
+    try:
+        return await _spawn_generic_bridge(agent_id)
+    except RuntimeError as e:
+        logger.error(f"[BridgeRouter] Auto-spawn failed for {agent_id}: {str(e)[:100]}")
+        return None
+
+
 async def chat_completion(
     messages: list[dict],
     agent_id: str | None = None,
     model: str | None = None,
     project_id: str | None = None,
 ) -> str:
-    """通过Agent Bridge获取Agent回复，返回文本
-    
-    流程：
-    1. 查找专属bridge → 如果有，直接路由
-    2. 查找已spawn的通用bridge → 如果有，直接路由
-    3. 没有任何bridge → 自动spawn通用bridge → 路由
-    4. spawn失败 → 返回错误信息
-    """
-    # ── Step 1: Get bridge URL (dedicated or previously spawned) ──
-    bridge_url = _get_bridge_url(agent_id)
-    
-    # ── Step 2: If no bridge, auto-spawn generic bridge ──
-    if not bridge_url and agent_id:
-        try:
-            bridge_url = await _spawn_generic_bridge(agent_id)
-        except RuntimeError as e:
-            return f"[Agent {agent_id} 无法启动: {str(e)[:100]}]"
+    """通过Agent Bridge获取Agent回复，返回文本"""
+    bridge_url = await _resolve_bridge_url(agent_id)
     
     if not bridge_url:
         return "[没有可用的Agent Bridge，无法生成回复]"
@@ -165,15 +179,7 @@ async def stream_chat_completion(
     project_id: str | None = None,
 ):
     """流式通过Agent Bridge获取Agent回复（整块yield）"""
-    # Same logic as chat_completion but yields entire reply
-    bridge_url = _get_bridge_url(agent_id)
-    
-    if not bridge_url and agent_id:
-        try:
-            bridge_url = await _spawn_generic_bridge(agent_id)
-        except RuntimeError as e:
-            yield f"[Agent {agent_id} 无法启动: {str(e)[:100]}]"
-            return
+    bridge_url = await _resolve_bridge_url(agent_id)
     
     if not bridge_url:
         yield "[没有可用的Agent Bridge，无法生成回复]"

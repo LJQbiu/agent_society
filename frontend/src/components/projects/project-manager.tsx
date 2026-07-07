@@ -46,24 +46,21 @@ export default function ProjectManager() {
   const handleJoin = (projectId: string) => {
     const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
     if (!agentId) return;
-    joinProject.mutate({ id: projectId, data: { agent_id: agentId } }, {
-      onSuccess: () => { viewDetail(projectId); setSuccessMsg("成功加入项目！"); },
-    });
+    joinProject.mutateAsync({ id: projectId, data: { agent_id: agentId } })
+      .then(() => { viewDetail(projectId); setSuccessMsg("成功加入项目！"); });
   };
 
   const handleLeave = (projectId: string) => {
     const agentId = selectedJoinAgent || myAgents?.agents?.[0]?.id;
     if (!agentId) return;
-    leaveProject.mutate({ id: projectId, data: { agent_id: agentId } }, {
-      onSuccess: () => { viewDetail(projectId); setSuccessMsg("已退出项目"); },
-    });
+    leaveProject.mutateAsync({ id: projectId, data: { agent_id: agentId } })
+      .then(() => { viewDetail(projectId); setSuccessMsg("已退出项目"); });
   };
 
   const handleStatusTransition = (projectId: string) => {
     if (!newStatus) return;
-    updateProjectStatus.mutate({ id: projectId, data: { new_status: newStatus as "recruiting" | "active" | "suspended" | "completed" | "revoked" } }, {
-      onSuccess: () => { setNewStatus(""); setSuccessMsg("状态已更新！"); },
-    });
+    updateProjectStatus.mutateAsync({ id: projectId, data: { new_status: newStatus as "recruiting" | "active" | "suspended" | "completed" | "revoked" } })
+      .then(() => { setNewStatus(""); setSuccessMsg("状态已更新！"); });
   };
 
   // ─── Computed ───
@@ -75,14 +72,43 @@ export default function ProjectManager() {
   const mutationError = createProject.error || updateProject.error || joinProject.error ||
     leaveProject.error || updateProjectStatus.error || createTodo.error;
 
+  // Valid status transitions map (matching backend transition_status rules)
+  const validTransitions: Record<string, string[]> = {
+    recruiting: ["active", "revoked"],
+    active: ["suspended", "completed", "revoked"],
+    suspended: ["active", "revoked"],
+    completed: [],
+    revoked: [],
+  };
+  const currentValidOptions = selectedProject ? validTransitions[selectedProject.status] || [] : [];
+
   const statusColor = (s: string) => {
     switch (s) {
       case "active": return "bg-green-100 text-green-700 border-green-300";
       case "recruiting": return "bg-blue-100 text-blue-700 border-blue-300";
       case "suspended": return "bg-yellow-100 text-yellow-700 border-yellow-300";
       case "completed": return "bg-gray-100 text-gray-600 border-gray-300";
-      case "paused": return "bg-orange-100 text-orange-700 border-orange-300";
+      case "revoked": return "bg-red-100 text-red-700 border-red-300";
       default: return "bg-red-100 text-red-700 border-red-300";
+    }
+  };
+
+  const participantStatusLabel = (s: string) => {
+    switch (s) {
+      case "active": return "活跃";
+      case "left": return "已退出";
+      default: return s;
+    }
+  };
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case "active": return "进行中";
+      case "recruiting": return "招募中";
+      case "suspended": return "暂停";
+      case "completed": return "已完成";
+      case "revoked": return "已撤销";
+      default: return s;
     }
   };
 
@@ -168,7 +194,7 @@ export default function ProjectManager() {
                       <p className="text-gray-500 text-sm mt-1">{p.description || "暂无描述"}</p>
                     </div>
                     <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium border", statusColor(p.status))}>
-                      {p.status}
+                      {statusLabel(p.status)}
                     </span>
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -209,7 +235,7 @@ export default function ProjectManager() {
                 <p className="text-gray-500 mt-1">{selectedProject.description || "暂无描述"}</p>
               </div>
               <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium border", statusColor(selectedProject.status))}>
-                {selectedProject.status}
+                {statusLabel(selectedProject.status)}
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 text-sm">
@@ -243,20 +269,27 @@ export default function ProjectManager() {
               className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-all shadow-sm">
               🚪 退出
             </button>
-            <div className="flex gap-1 items-center ml-2">
-              <select value={newStatus} onChange={e => setNewStatus(e.target.value)}
-                className="border border-gray-200 p-2 rounded-lg text-sm focus:border-brand-500">
-                <option value="">变更状态...</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <button onClick={() => handleStatusTransition(selectedProject.id)}
-                className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 transition-all shadow-sm">
-                应用
-              </button>
-            </div>
+            {currentValidOptions.length > 0 && (
+              <div className="flex gap-1 items-center ml-2">
+                <select value={newStatus} onChange={e => setNewStatus(e.target.value)}
+                  className="border border-gray-200 p-2 rounded-lg text-sm focus:border-brand-500">
+                  <option value="">变更状态...</option>
+                  {currentValidOptions.map(s => (
+                    <option key={s} value={s}>
+                      {s === "active" ? "🟢 进行中" : s === "suspended" ? "⏸️ 暂停" : s === "completed" ? "✅ 已完成" : s === "revoked" ? "❌ 已撤销" : s}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => handleStatusTransition(selectedProject.id)}
+                  className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg text-sm hover:bg-yellow-700 transition-all shadow-sm disabled:opacity-50"
+                  disabled={!newStatus || updateProjectStatus.isPending}>
+                  应用
+                </button>
+              </div>
+            )}
+            {currentValidOptions.length === 0 && selectedProject && (
+              <span className="text-xs text-gray-400 ml-2">当前状态不可变更</span>
+            )}
           </div>
 
           {/* Participants */}
@@ -283,7 +316,7 @@ export default function ProjectManager() {
                           <span className="text-xs text-gray-400 ml-1" title={p.agent_id}>{p.agent_id.slice(0,8)}...</span>
                         </td>
                         <td className="py-2 px-3 hidden sm:table-cell text-gray-600">{p.role}</td>
-                        <td className="py-2 px-3">{p.status}</td>
+                        <td className="py-2 px-3">{participantStatusLabel(p.status)}</td>
                         <td className="py-2 px-3 hidden sm:table-cell text-gray-500">{p.created_at ? new Date(p.created_at).toLocaleString() : "-"}</td>
                       </tr>
                     ))}
@@ -320,6 +353,7 @@ export default function ProjectManager() {
               todos={todos}
               projectId={selectedProjectId}
               agentId={selectedJoinAgent || myAgents?.agents?.[0]?.id}
+              participants={participants}
               todoBorderColor={todoBorderColor}
               createTodo={createTodo}
               claimTodo={claimTodo}

@@ -9,6 +9,7 @@ class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field(default="")
     type: str = Field(default="general")  # general|research|commercial|competitive|collaborative
+    status: str = Field(default="recruiting")  # recruiting|active|suspended|completed|revoked
     budget: float = Field(default=0.0)
     reputation_budget: float = Field(default=0.0)
     required_capabilities: List[str] = Field(default_factory=list)

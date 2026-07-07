@@ -8,7 +8,7 @@
   - LLM calls via GA's agent_runner_loop (with full tool capabilities)
   - Generic system prompt (无特殊人格)
 """
-import sys, os, json, asyncio, traceback, argparse
+import sys, os, json, asyncio, traceback, argparse, time
 from datetime import datetime
 from typing import Optional
 
@@ -65,16 +65,18 @@ SYSTEM_PROMPT_TEMPLATE = """你是 {agent_name}，一个活跃在 Agent Society 
 - 💬 与其他Agent和人类用户交流协作
 - 🛠️ 执行代码、搜索网页、读写文件等实际操作
 
+{project_context}
+
 当前Agent社会概况：
 {context}
 
 你的特点：
 - 理性、专业、乐于协作
-- 回答问题时会引用具体的Agent社会数据
+- 回答问题时会引用具体的项目背景和Agent社会数据
 - 需要执行操作时，主动调用合适的工具
 - 用中文交流为主，必要时也用英文
 
-请根据用户的消息，结合Agent社会的实际情况进行回复。如果需要查询数据或执行操作，
+请根据用户的消息，结合项目背景和Agent社会的实际情况进行回复。如果需要查询数据或执行操作，
 请使用提供的工具。"""
 
 # ── FastAPI app ──
@@ -139,7 +141,61 @@ async def fetch_society_context() -> str:
 
     except Exception as e:
         ctx_parts.append(f"【平台连接异常】: {e}")
-    return "\n".join(ctx_parts) if ctx_parts else "平台数据暂不可用"
+async def fetch_project_context(project_id: str) -> str:
+    """Fetch specific project details, participants and todos for system prompt."""
+    if not project_id:
+        return ""
+    ctx_parts = []
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            # ── 项目详情 ──
+            r = await c.get(f"{PLATFORM_BASE}/project/{project_id}")
+            if r.status_code == 200:
+                proj = r.json()
+                ctx_parts.append("【你当前参与的项目】")
+                ctx_parts.append(f"  项目名称: {proj.get('name', '?')}")
+                desc = proj.get('description', '')
+                if desc:
+                    ctx_parts.append(f"  项目描述: {desc}")
+                else:
+                    ctx_parts.append(f"  项目描述: (暂无详细描述，请根据项目名称推断项目目标)")
+                ctx_parts.append(f"  项目类型: {proj.get('type', '?')}")
+                ctx_parts.append(f"  项目状态: {proj.get('status', '?')}")
+                caps = proj.get('required_capabilities', [])
+                if caps:
+                    ctx_parts.append(f"  所需能力: {', '.join(caps)}")
+
+            # ── 项目参与者 ──
+            r2 = await c.get(f"{PLATFORM_BASE}/project/{project_id}/participants")
+            if r2.status_code == 200:
+                participants = r2.json().get("participants", [])
+                ctx_parts.append(f"  参与者({len(participants)}人):")
+                for p in participants:
+                    ctx_parts.append(
+                        f"    - {p.get('agent_name', '?')} 角色:{p.get('role', '?')} 状态:{p.get('status', '?')}"
+                    )
+
+            # ── 项目TODO ──
+            r3 = await c.get(f"{PLATFORM_BASE}/project/{project_id}/todos")
+            if r3.status_code == 200:
+                todos = r3.json().get("todos", [])
+                active = [t for t in todos if t.get("status") in ("open", "claimed", "in_progress")]
+                if active:
+                    ctx_parts.append(f"  活跃TODO({len(active)}):")
+                    for t in active[:5]:
+                        claimed = t.get('claimed_by_name', '')
+                        ctx_parts.append(
+                            f"    - [{t.get('status','?')}] {t.get('title','?')} "
+                            f"(优先级:{t.get('priority','?')})"
+                            + (f" 认领人:{claimed}" if claimed else "")
+                        )
+                        tdesc = t.get('description', '')
+                        if tdesc:
+                            ctx_parts.append(f"      详情: {tdesc}")
+
+    except Exception as e:
+        ctx_parts.append(f"【项目信息获取失败】: {e}")
+    return "\n".join(ctx_parts) if ctx_parts else ""
 
 
 # ─── Core: Agent Loop ───
@@ -240,7 +296,10 @@ async def chat_completion(req: ChatRequest):
 
         # ── Fetch context and build system prompt ──
         context = await fetch_society_context()
-        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(agent_name=AGENT_NAME, context=context)
+        project_context = await fetch_project_context(project_id)
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            agent_name=AGENT_NAME, project_context=project_context, context=context
+        )
         
         # ── Inject per-project conversation history into system prompt ──
         history_block = _build_history_block(project_id)
@@ -295,7 +354,11 @@ async def ws_chat(ws: WebSocket):
             user_input = msg.get("content", data if isinstance(data, str) else "")
 
             context = await fetch_society_context()
-            system_prompt = SYSTEM_PROMPT_TEMPLATE.format(agent_name=AGENT_NAME, context=context)
+            ws_project_id = msg.get("project_id", "default")
+            project_context = await fetch_project_context(ws_project_id)
+            system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+                agent_name=AGENT_NAME, project_context=project_context, context=context
+            )
             reply = await run_agent_loop(system_prompt, user_input)
 
             await ws.send_text(json.dumps({

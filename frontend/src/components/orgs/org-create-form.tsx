@@ -17,13 +17,12 @@ export function OrgCreateForm({ createOrg, onErrorMsg, onSuccessMsg }: OrgCreate
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     onErrorMsg(""); onSuccessMsg("");
-    createOrg.mutate(createForm, {
-      onSuccess: () => {
+    createOrg.mutateAsync(createForm)
+      .then(() => {
         onSuccessMsg("组织创建成功！");
         setCreateForm({ name: "", description: "", org_type: "company", governance_model: "democratic", charter: {} });
-      },
-      onError: (err: Error) => onErrorMsg(err.message || "创建失败"),
-    });
+      })
+      .catch((err: unknown) => onErrorMsg((err as Error).message || "创建失败"));
   };
 
   return (

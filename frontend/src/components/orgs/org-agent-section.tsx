@@ -23,24 +23,22 @@ export function OrgAgentSection({ orgId, myAgents, joinOrg, registerAgent, onErr
   const handleJoin = () => {
     if (!orgId || !joinAgentId) return;
     onErrorMsg(""); onSuccessMsg("");
-    joinOrg.mutate({ orgId, data: { agent_id: joinAgentId } }, {
-      onSuccess: () => { setJoinAgentId(""); onSuccessMsg("成功加入组织！"); },
-      onError: (err: Error) => onErrorMsg(err.message || "加入失败"),
-    });
+    joinOrg.mutateAsync({ orgId, data: { agent_id: joinAgentId } })
+      .then(() => { setJoinAgentId(""); onSuccessMsg("成功加入组织！"); })
+      .catch((err: unknown) => onErrorMsg((err as Error).message || "加入失败"));
   };
 
   const handleRegisterAgent = (e: React.FormEvent) => {
     e.preventDefault();
     onErrorMsg(""); onSuccessMsg("");
-    registerAgent.mutate({
+    registerAgent.mutateAsync({
       agent_id: agentForm.name.toLowerCase().replace(/\s+/g, "_"),
       name: agentForm.name,
       description: agentForm.description,
       capabilities: agentForm.capabilities.split(",").map(c => c.trim()).filter(Boolean),
-    }, {
-      onSuccess: () => { setShowRegisterAgent(false); onSuccessMsg("Agent注册成功！"); setAgentForm({ name: "", description: "", capabilities: "", type: "assistant" }); },
-      onError: (err: Error) => onErrorMsg(err.message || "注册Agent失败"),
-    });
+    })
+      .then(() => { setShowRegisterAgent(false); onSuccessMsg("Agent注册成功！"); setAgentForm({ name: "", description: "", capabilities: "", type: "assistant" }); })
+      .catch((err: unknown) => onErrorMsg((err as Error).message || "注册Agent失败"));
   };
 
   return (

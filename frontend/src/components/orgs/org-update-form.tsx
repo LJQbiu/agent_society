@@ -18,10 +18,9 @@ export function OrgUpdateForm({ selectedOrg, orgId, updateOrg, onErrorMsg, onSuc
     e.preventDefault();
     if (!orgId) return;
     onErrorMsg(""); onSuccessMsg("");
-    updateOrg.mutate({ id: orgId, data: updateForm }, {
-      onSuccess: () => { setUpdateForm({}); onSuccessMsg("组织更新成功！"); },
-      onError: (err: Error) => onErrorMsg(err.message || "更新失败"),
-    });
+    updateOrg.mutateAsync({ id: orgId, data: updateForm })
+      .then(() => { setUpdateForm({}); onSuccessMsg("组织更新成功！"); })
+      .catch((err: unknown) => onErrorMsg((err as Error).message || "更新失败"));
   };
 
   return (

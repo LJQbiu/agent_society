@@ -51,31 +51,30 @@ export function useIdentityManager() {
   };
 
   const getCredential = (agentId: string) => {
-    identityMutations.agentCredentials.mutate(agentId, {
-      onSuccess: (data: { client_id: string; client_secret: string; status?: string }) => {
-        setCredential({ client_id: data.client_id, client_secret: data.client_secret, status: data.status });
+    identityMutations.agentCredentials.mutateAsync(agentId)
+      .then((data: unknown) => {
+        const result = data as { client_id: string; client_secret: string; status?: string };
+        setCredential({ client_id: result.client_id, client_secret: result.client_secret, status: result.status });
         showToast("凭证已获取", "success");
-      },
-      onError: (err: Error) => showToast(`获取凭证失败: ${err.message}`, "error"),
-    });
+      })
+      .catch((err: Error) => showToast(`获取凭证失败: ${err.message}`, "error"));
   };
 
   const bindAgent = (agentId: string) => {
-    agentMutations.bindAgent.mutate(agentId, {
-      onSuccess: (data: { client_id: string; client_secret: string; status?: string }) => {
-        setCredential({ client_id: data.client_id, client_secret: data.client_secret, status: data.status });
+    agentMutations.bindAgent.mutateAsync(agentId)
+      .then((data: unknown) => {
+        const result = data as { client_id: string; client_secret: string; status?: string };
+        setCredential({ client_id: result.client_id, client_secret: result.client_secret, status: result.status });
         showToast("绑定成功，凭证已生成", "success");
-      },
-      onError: (err: Error) => showToast(`绑定失败: ${err.message}`, "error"),
-    });
+      })
+      .catch((err: Error) => showToast(`绑定失败: ${err.message}`, "error"));
   };
 
   const deleteAgent = (agentId: string, agentName: string) => {
     if (!confirm(`确定删除 ${agentName}？此操作不可撤销。`)) return;
-    agentMutations.deleteAgent.mutate(agentId, {
-      onSuccess: () => showToast(`${agentName} 已删除`, "success"),
-      onError: (err: Error) => showToast(`删除失败: ${err.message}`, "error"),
-    });
+    agentMutations.deleteAgent.mutateAsync(agentId)
+      .then(() => showToast(`${agentName} 已删除`, "success"))
+      .catch((err: Error) => showToast(`删除失败: ${err.message}`, "error"));
   };
 
   const registerAgent = () => {

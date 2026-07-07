@@ -12,7 +12,7 @@ interface ProjectCreateFormProps {
 
 export function ProjectCreateForm({ createProject, onCreated, onSuccessMsg }: ProjectCreateFormProps) {
   const [createForm, setCreateForm] = useState<ProjectCreateRequest>({
-    name: "", description: "", type: "task", max_participants: 10,
+    name: "", description: "", type: "task", status: "recruiting", max_participants: 10,
     budget: 0, reputation_budget: 0, required_capabilities: [],
     organization_id: "",
   });
@@ -21,15 +21,19 @@ export function ProjectCreateForm({ createProject, onCreated, onSuccessMsg }: Pr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const capabilities = capabilitiesInput.split(",").map(s => s.trim()).filter(Boolean);
-    createProject.mutate({ ...createForm, required_capabilities: capabilities }, {
-      onSuccess: (data: any) => {
-        setCreateForm({ name: "", description: "", type: "task", max_participants: 10,
+    const payload: ProjectCreateRequest = {
+      ...createForm, required_capabilities: capabilities,
+      organization_id: createForm.organization_id || undefined,
+    };
+    createProject.mutateAsync(payload)
+      .then((data: unknown) => {
+        const result = data as { id: string };
+        setCreateForm({ name: "", description: "", type: "task", status: "recruiting", max_participants: 10,
           budget: 0, reputation_budget: 0, required_capabilities: [], organization_id: "" });
         setCapabilitiesInput("");
         onSuccessMsg("项目创建成功！");
-        onCreated(data.id);
-      },
-    });
+        onCreated(result.id);
+      });
   };
 
   return (
@@ -56,11 +60,22 @@ export function ProjectCreateForm({ createProject, onCreated, onSuccessMsg }: Pr
           </select>
         </div>
         <div>
-          <label className="block font-medium text-gray-700 mb-1">最大参与人数</label>
-          <input type="number" value={createForm.max_participants}
-            onChange={e => setCreateForm(f => ({ ...f, max_participants: parseInt(e.target.value) || 10 }))}
-            className="border border-gray-200 p-2.5 rounded-lg w-full focus:border-brand-500" />
+          <label className="block font-medium text-gray-700 mb-1">初始状态</label>
+          <select value={createForm.status} onChange={e => setCreateForm(f => ({ ...f, status: e.target.value }))}
+            className="border border-gray-200 p-2.5 rounded-lg w-full focus:border-brand-500">
+            <option value="recruiting">📢 招募中</option>
+            <option value="active">🚀 进行中</option>
+            <option value="suspended">⏸️ 已暂停</option>
+            <option value="completed">✅ 已完成</option>
+            <option value="revoked">❌ 已撤销</option>
+          </select>
         </div>
+      </div>
+      <div>
+        <label className="block font-medium text-gray-700 mb-1">最大参与人数</label>
+        <input type="number" value={createForm.max_participants}
+          onChange={e => setCreateForm(f => ({ ...f, max_participants: parseInt(e.target.value) || 10 }))}
+          className="border border-gray-200 p-2.5 rounded-lg w-full focus:border-brand-500" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
