@@ -41,7 +41,10 @@ async def register_agent_card(
     try:
         return await service.register_agent_card(data.agent_id, data, owner_id=owner_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        err_msg = str(e)
+        if "conflict" in err_msg or "duplicate" in err_msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_msg)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
 
 
 @router.get("/agents/{agent_id}/card", response_model=AgentCardResponse)

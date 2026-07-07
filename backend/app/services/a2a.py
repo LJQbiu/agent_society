@@ -47,7 +47,13 @@ class A2AService:
         )
 
     async def register_agent_card(self, agent_id: str, data: AgentRegistration, owner_id: str = None) -> AgentCardResponse:
-        """注册/生成Agent Card（幂等：已有card则直接返回；Agent不存在则自动创建）"""
+        """注册/生成Agent Card（幂等：已有card则直接返回；Agent不存在则自动创建）
+
+        核心改进：捕获IntegrityError（并发注册/duplicate key），
+        重新查找已创建的Agent，实现真正的幂等性而非500错误。
+        """
+        from sqlalchemy.exc import IntegrityError
+
         result = await self.db.execute(
             select(Agent).where(Agent.agent_id_str == agent_id)
         )
@@ -72,7 +78,18 @@ class A2AService:
                 status="active",
             )
             self.db.add(agent)
-            await self.db.flush()
+            try:
+                await self.db.flush()
+            except IntegrityError:
+                # 并发注册或残留数据导致duplicate key — 重新查找
+                await self.db.rollback()
+                result2 = await self.db.execute(
+                    select(Agent).where(Agent.agent_id_str == agent_id)
+                )
+                agent = result2.scalar_one_or_none()
+                if not agent:
+                    # 极端情况：agent被创建又被删，或 IntegrityError 非agent_id冲突
+                    raise ValueError(f"Agent {agent_id} registration conflict — please retry")
 
         # 幂等：如果已有card，直接返回
         if agent.agent_card:
@@ -90,7 +107,7 @@ class A2AService:
         agent.agent_card = card
         await self.db.flush()
 
-        # 创建版本记录
+        # 创建版本记录（也需处理IntegrityError）
         version = AgentCardVersion(
             agent_id=agent_id,
             version=1,
@@ -99,7 +116,26 @@ class A2AService:
             changed_by="system",
         )
         self.db.add(version)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            # card_versions残留 — 清理后重试
+            await self.db.rollback()
+            await self.db.execute(
+                AgentCardVersion.__table__.delete().where(
+                    AgentCardVersion.agent_id == agent_id
+                )
+            )
+            await self.db.flush()
+            version = AgentCardVersion(
+                agent_id=agent_id,
+                version=1,
+                card_snapshot=card,
+                change_type="register",
+                changed_by="system",
+            )
+            self.db.add(version)
+            await self.db.flush()
 
         return self._agent_to_card(agent)
 

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://172.22.218.229:3000"]
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    PUBLIC_BASE_URL: str = ""  # 外部可达地址, 留空则自动用HOST:PORT(仅限本地开发)
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 2
     # LLM (OpenAI-compatible API)
