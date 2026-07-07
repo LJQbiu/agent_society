@@ -1,187 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
-import { useToast } from "@/components/common/toast";
-import type { DashboardStats, AdminListItem, AuditLogEvent } from "@/types";
+import { AdminLoginForm } from "./admin-login-form";
+import { useAdminPanel, type TabType } from "./use-admin-panel";
 
-type TabType = "dashboard" | "agents" | "projects" | "organizations" | "purge" | "audit";
+const tabs: { key: TabType; label: string }[] = [
+  { key: "dashboard", label: "📊 Dashboard" },
+  { key: "agents", label: "🤖 Agents" },
+  { key: "projects", label: "📁 Projects" },
+  { key: "organizations", label: "🏢 Organizations" },
+  { key: "purge", label: "🧹 Purge" },
+  { key: "audit", label: "📋 Audit" },
+];
 
 export function AdminPanel() {
-  const { showToast } = useToast();
-  // Admin auth: check localStorage for admin_token
-  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
-  const [loginUsername, setLoginUsername] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState("");
+  const {
+    adminLoggedIn,
+    activeTab, setActiveTab,
+    stats, items, loading, auditEntries,
+    handleLogin, handleLogout,
+    handleDelete, handlePurge,
+  } = useAdminPanel();
 
-  useEffect(() => {
-    setAdminLoggedIn(Boolean(localStorage.getItem("admin_token")));
-  }, []);
-
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError("");
-    try {
-      await api.admin.login({ username: loginUsername, password: loginPassword });
-      setAdminLoggedIn(true);
-      showToast("Admin登录成功", "success");
-    } catch (err: any) {
-      setLoginError(err.message || "登录失败");
-      showToast("Admin登录失败: " + (err.message || "未知错误"), "error");
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleAdminLogout = () => {
-    api.admin.logout();
-    setAdminLoggedIn(false);
-    setStats(null);
-    setItems([]);
-    setAuditEntries([]);
-    showToast("已退出Admin", "success");
-  };
-  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [items, setItems] = useState<AdminListItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [auditEntries, setAuditEntries] = useState<AuditLogEvent[]>([]);
-
-  // Dashboard stats
-  useEffect(() => {
-    if (activeTab === "dashboard") loadDashboard();
-  }, [activeTab]);
-
-  // List items
-  useEffect(() => {
-    if (["agents", "projects", "organizations"].includes(activeTab)) loadList(activeTab);
-  }, [activeTab]);
-
-  // Audit log
-  useEffect(() => {
-    if (activeTab === "audit") loadAudit();
-  }, [activeTab]);
-
-  const loadDashboard = async () => {
-    setLoading(true);
-    try {
-      const res = await api.admin.dashboard();
-      setStats(res.stats);
-    } catch (e: any) {
-      showToast("加载dashboard失败: " + (e.message || "未知错误"), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadList = async (type: TabType) => {
-    setLoading(true);
-    try {
-      let res;
-      if (type === "agents") res = await api.admin.listAgents();
-      else if (type === "projects") res = await api.admin.listProjects();
-      else res = await api.admin.listOrganizations();
-      if (type === "agents") setItems(res.agents || []);
-      else if (type === "projects") setItems(res.projects || []);
-      else setItems(res.organizations || []);
-    } catch (e: any) {
-      showToast("加载列表失败: " + (e.message || "未知错误"), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAudit = async () => {
-    setLoading(true);
-    try {
-      const res = await api.admin.getAuditLog();
-      setAuditEntries(res.events || []);
-    } catch (e: any) {
-      showToast("加载审计日志失败: " + (e.message || "未知错误"), "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (type: "agent" | "project" | "organization", id: string, name: string) => {
-    if (!confirm(`确认删除 ${type} "${name}"？此操作不可撤销！`)) return;
-    try {
-      let res;
-      if (type === "agent") res = await api.admin.deleteAgent(id);
-      else if (type === "project") res = await api.admin.deleteProject(id);
-      else res = await api.admin.deleteOrganization(id);
-      showToast(res.message || "删除成功", "success");
-      loadList(activeTab);
-    } catch (e: any) {
-      showToast("删除失败: " + (e.message || "未知错误"), "error");
-    }
-  };
-
-  const handlePurge = async () => {
-    const scope = prompt("输入清理范围(agents/projects/organizations/all)，默认all:", "all");
-    if (scope === null) return;
-    const filter = prompt("输入过滤类型(test/inactive/all)，默认all:", "all");
-    if (filter === null) return;
-    if (!confirm(`确认批量清理？scope=${scope}, filter="${filter}"。此操作不可撤销！`)) return;
-    try {
-      const res = await api.admin.purge({ scope: scope || "all", filter: filter || "all", confirm: true });
-      showToast(res.message || "清理完成", "success");
-    } catch (e: any) {
-      showToast("清理失败: " + (e.message || "未知错误"), "error");
-    }
-  };
-
-  const tabs: { key: TabType; label: string }[] = [
-    { key: "dashboard", label: "📊 Dashboard" },
-    { key: "agents", label: "🤖 Agents" },
-    { key: "projects", label: "📁 Projects" },
-    { key: "organizations", label: "🏢 Organizations" },
-    { key: "purge", label: "🧹 Purge" },
-    { key: "audit", label: "📋 Audit" },
-  ];
-
-  // Show login form if not authenticated
   if (!adminLoggedIn) {
-    return (
-      <div className="p-6 max-w-md mx-auto mt-20">
-        <h1 className="text-2xl font-bold mb-6 text-center">🔐 Admin 登录</h1>
-        <form onSubmit={handleAdminLogin} className="bg-white rounded-lg shadow p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
-            <input
-              type="text"
-              value={loginUsername}
-              onChange={e => setLoginUsername(e.target.value)}
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="super_admin"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
-            <input
-              type="password"
-              value={loginPassword}
-              onChange={e => setLoginPassword(e.target.value)}
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Admin123!@#"
-              required
-            />
-          </div>
-          {loginError && <div className="text-red-500 text-sm">{loginError}</div>}
-          <button
-            type="submit"
-            disabled={loginLoading}
-            className="w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition disabled:opacity-50"
-          >
-            {loginLoading ? "登录中..." : "登录"}
-          </button>
-        </form>
-      </div>
-    );
+    return <AdminLoginForm onLogin={handleLogin} />;
   }
 
   return (
@@ -189,7 +30,7 @@ export function AdminPanel() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Admin Dashboard</h1>
         <button
-          onClick={handleAdminLogout}
+          onClick={handleLogout}
           className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300 transition"
         >
           🚪 退出登录
