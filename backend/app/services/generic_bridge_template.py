@@ -66,6 +66,64 @@ def _estimate_tokens(text: str) -> int:
     """Rough token count: ~4 chars per token for mixed CJK/English."""
     return max(1, len(text) // 4) if text else 0
 
+# ── Memory functions ──
+async def fetch_relevant_memories() -> str:
+    """Fetch relevant memories from platform API for injection into system prompt."""
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(f"{PLATFORM_BASE}/agents/{AGENT_ID}/memories/relevant")
+            if r.status_code == 200:
+                data = r.json()
+                core = data.get("core", [])
+                dynamic = data.get("dynamic", [])
+                if not core and not dynamic:
+                    return "（暂无跨会话记忆）"
+                parts = []
+                if core:
+                    parts.append("【核心记忆(identity/偏好，始终加载)】:")
+                    for m in core:
+                        parts.append(f"  [{m['category']}] {m['key']}: {m['content'][:150]}")
+                if dynamic:
+                    parts.append("【相关动态记忆(知识/经验/流程)】:")
+                    for m in dynamic:
+                        parts.append(f"  [{m['category']}] {m['key']}: {m['content'][:150]}")
+                return "\n".join(parts)
+            else:
+                return "（记忆获取失败）"
+    except Exception as e:
+        print(f"[GenericBridge] Memory fetch error: {e}")
+        return "（记忆获取异常）"
+
+
+def _extract_and_save_memory(reply: str) -> str:
+    """Parse MEMORY_SAVE blocks from reply, call API to persist, return cleaned reply."""
+    import re
+    pattern = r'<<MEMORY_SAVE>>\s*category:\s*(\S+)\s*key:\s*(.+?)\s*content:\s*(.+?)\s*importance:\s*(\d+)\s*<<END_MEMORY_SAVE>>'
+    matches = re.findall(pattern, reply, re.DOTALL)
+    cleaned = re.sub(pattern, '', reply).strip()
+
+    for category, key, content, importance in matches:
+        try:
+            r = httpx.post(
+                f"{PLATFORM_BASE}/agents/{AGENT_ID}/memories",
+                json={
+                    "category": category.strip(),
+                    "key": key.strip(),
+                    "content": content.strip(),
+                    "importance": int(importance.strip()),
+                },
+                timeout=5,
+            )
+            if r.status_code in (200, 201):
+                print(f"[GenericBridge] Memory saved: [{category}] {key[:30]}")
+            else:
+                print(f"[GenericBridge] Memory save failed: {r.status_code} {r.text[:100]}")
+        except Exception as e:
+            print(f"[GenericBridge] Memory save error: {e}")
+
+    return cleaned
+
+
 # ── Context cache with TTL ──
 _context_cache: dict = {"society": {"text": "", "expires": 0}, "project": {}}
 CONTEXT_CACHE_TTL = 300  # 5 minutes
@@ -84,14 +142,25 @@ SYSTEM_PROMPT_TEMPLATE = """你是 {agent_name}，一个活跃在 Agent Society 
 当前Agent社会概况：
 {context}
 
+【你的跨会话记忆】（来自之前交互的重要知识，已持久化保存）：
+{memory_context}
+
 你的特点：
 - 理性、专业、乐于协作
 - 回答问题时会引用具体的项目背景和Agent社会数据
 - 需要执行操作时，主动调用合适的工具
 - 用中文交流为主，必要时也用英文
 
-请根据用户的消息，结合项目背景和Agent社会的实际情况进行回复。如果需要查询数据或执行操作，
-请使用提供的工具。"""
+⚠️ 记忆保存规则：当你学到重要知识、发现关键规律、或需要跨会话记住信息时，
+用以下格式保存（每次回复最多保存1条，只有真正重要的才保存）：
+<<MEMORY_SAVE>>
+category: <identity|knowledge|experience|preference|procedure>
+key: <简短标题，20字内>
+content: <详细内容>
+importance: <1-10，越高越重要>
+<<END_MEMORY_SAVE>>
+
+请根据用户的消息，结合记忆、项目背景和Agent社会的实际情况进行回复。"""
 
 # ── FastAPI app ──
 app = FastAPI(title=f"GenericBridge-{AGENT_NAME}", version="1.0")
@@ -390,8 +459,10 @@ async def chat_completion(req: ChatRequest):
         # ── Fetch context (cached) and build system prompt ──
         context = await fetch_society_context_cached()
         project_context = await fetch_project_context_cached(project_id)
+        memory_context = await fetch_relevant_memories()
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-            agent_name=AGENT_NAME, project_context=project_context, context=context
+            agent_name=AGENT_NAME, project_context=project_context, context=context,
+            memory_context=memory_context
         )
 
         # ── Inject compressed per-project conversation history ──
@@ -405,6 +476,9 @@ async def chat_completion(req: ChatRequest):
 
         # ── Run agent loop ──
         reply = await run_agent_loop(system_prompt, user_input)
+
+        # ── Extract & save memories from reply, return cleaned text ──
+        reply = _extract_and_save_memory(reply)
 
         # ── Store this interaction in session ──
         if project_id not in _sessions:
@@ -449,8 +523,10 @@ async def ws_chat(ws: WebSocket):
 
             context = await fetch_society_context_cached()
             project_context = await fetch_project_context_cached(ws_project_id)
+            memory_context = await fetch_relevant_memories()
             system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-                agent_name=AGENT_NAME, project_context=project_context, context=context
+                agent_name=AGENT_NAME, project_context=project_context, context=context,
+                memory_context=memory_context
             )
 
             # Inject compressed history
@@ -463,6 +539,9 @@ async def ws_chat(ws: WebSocket):
                 )
 
             reply = await run_agent_loop(system_prompt, user_input)
+
+            # ── Extract & save memories from reply ──
+            reply = _extract_and_save_memory(reply)
 
             # Store this interaction in session
             if ws_project_id not in _sessions:

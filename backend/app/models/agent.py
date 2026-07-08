@@ -24,3 +24,4 @@ class Agent(Base, UUIDMixin, TimestampMixin):
     
     owner = relationship("Human", back_populates="agents")
     projects = relationship("ProjectParticipant", back_populates="agent")
+    memories = relationship("AgentMemory", back_populates="agent", order_by="AgentMemory.importance.desc()")

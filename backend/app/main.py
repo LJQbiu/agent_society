@@ -40,7 +40,7 @@ app.add_middleware(
 )
 
 # Router注册
-from app.routers import identity, auth, a2a, mcp, observatory, admin, settlement, organization, project, ws, skills
+from app.routers import identity, auth, a2a, mcp, observatory, admin, settlement, organization, project, ws, skills, memories
 
 app.include_router(identity.router)
 app.include_router(auth.router)
@@ -54,6 +54,7 @@ app.include_router(organization.router)
 app.include_router(project.router)
 app.include_router(ws.router)
 app.include_router(skills.router)
+app.include_router(memories.router)
 
 
 @app.get("/health")
