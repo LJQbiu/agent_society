@@ -7,6 +7,11 @@
   - FastAPI server on given port
   - LLM calls via GA's agent_runner_loop (with full tool capabilities)
   - Generic system prompt (无特殊人格)
+
+上下文管理优化(v2):
+  - Context TTL缓存(5min): 避免每条消息重复fetch平台数据
+  - Token预算历史压缩: 近5条全文+更早的50字摘要, 总≤4000 tokens
+  - 只接收增量消息(不发全量history): 平台只发最新消息, bridge维护session
 """
 import sys, os, json, asyncio, traceback, argparse, time
 from datetime import datetime
@@ -55,6 +60,15 @@ class BridgeAgentContext:
 
 # ── Platform config ──
 PLATFORM_BASE = "http://127.0.0.1:8000"
+
+# ── Token estimation ──
+def _estimate_tokens(text: str) -> int:
+    """Rough token count: ~4 chars per token for mixed CJK/English."""
+    return max(1, len(text) // 4) if text else 0
+
+# ── Context cache with TTL ──
+_context_cache: dict = {"society": {"text": "", "expires": 0}, "project": {}}
+CONTEXT_CACHE_TTL = 300  # 5 minutes
 
 # ── Generic system prompt ──
 SYSTEM_PROMPT_TEMPLATE = """你是 {agent_name}，一个活跃在 Agent Society 中的智能Agent。
@@ -141,6 +155,9 @@ async def fetch_society_context() -> str:
 
     except Exception as e:
         ctx_parts.append(f"【平台连接异常】: {e}")
+    return "\n".join(ctx_parts) if ctx_parts else ""  # ← BUG FIX: was missing return
+
+
 async def fetch_project_context(project_id: str) -> str:
     """Fetch specific project details, participants and todos for system prompt."""
     if not project_id:
@@ -148,54 +165,75 @@ async def fetch_project_context(project_id: str) -> str:
     ctx_parts = []
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            # ── 项目详情 ──
-            r = await c.get(f"{PLATFORM_BASE}/project/{project_id}")
-            if r.status_code == 200:
-                proj = r.json()
-                ctx_parts.append("【你当前参与的项目】")
-                ctx_parts.append(f"  项目名称: {proj.get('name', '?')}")
-                desc = proj.get('description', '')
-                if desc:
-                    ctx_parts.append(f"  项目描述: {desc}")
-                else:
-                    ctx_parts.append(f"  项目描述: (暂无详细描述，请根据项目名称推断项目目标)")
-                ctx_parts.append(f"  项目类型: {proj.get('type', '?')}")
-                ctx_parts.append(f"  项目状态: {proj.get('status', '?')}")
-                caps = proj.get('required_capabilities', [])
-                if caps:
-                    ctx_parts.append(f"  所需能力: {', '.join(caps)}")
+            # ── Project details ──
+            try:
+                r = await c.get(f"{PLATFORM_BASE}/project/{project_id}")
+                if r.status_code == 200:
+                    proj = r.json().get("project", r.json())
+                    ctx_parts.append(f"【当前项目】: {proj.get('name', '?')} (ID: {project_id[:20]}...)")
+                    ctx_parts.append(f"  状态: {proj.get('status', '?')}")
+                    ctx_parts.append(f"  目标: {proj.get('description', '?')[:200]}")
+            except Exception as e:
+                ctx_parts.append(f"【项目详情获取失败】: {e}")
 
-            # ── 项目参与者 ──
-            r2 = await c.get(f"{PLATFORM_BASE}/project/{project_id}/participants")
-            if r2.status_code == 200:
-                participants = r2.json().get("participants", [])
-                ctx_parts.append(f"  参与者({len(participants)}人):")
-                for p in participants:
-                    ctx_parts.append(
-                        f"    - {p.get('agent_name', '?')} 角色:{p.get('role', '?')} 状态:{p.get('status', '?')}"
-                    )
-
-            # ── 项目TODO ──
-            r3 = await c.get(f"{PLATFORM_BASE}/project/{project_id}/todos")
-            if r3.status_code == 200:
-                todos = r3.json().get("todos", [])
-                active = [t for t in todos if t.get("status") in ("open", "claimed", "in_progress")]
-                if active:
-                    ctx_parts.append(f"  活跃TODO({len(active)}):")
-                    for t in active[:5]:
-                        claimed = t.get('claimed_by_name', '')
+            # ── Participants ──
+            try:
+                r_p = await c.get(f"{PLATFORM_BASE}/project/{project_id}/participants")
+                if r_p.status_code == 200:
+                    parts = r_p.json().get("participants", [])
+                    ctx_parts.append(f"【项目成员({len(parts)}人)】:")
+                    for p in parts[:8]:
                         ctx_parts.append(
-                            f"    - [{t.get('status','?')}] {t.get('title','?')} "
-                            f"(优先级:{t.get('priority','?')})"
-                            + (f" 认领人:{claimed}" if claimed else "")
+                            f"  - {p.get('name', '?')} 角色:{p.get('role', '?')} "
+                            f"状态:{p.get('status', '?')}"
                         )
-                        tdesc = t.get('description', '')
-                        if tdesc:
-                            ctx_parts.append(f"      详情: {tdesc}")
+            except Exception as e:
+                ctx_parts.append(f"【成员信息获取失败】: {e}")
+
+            # ── Project Todos ──
+            try:
+                r_t = await c.get(f"{PLATFORM_BASE}/project/{project_id}/todos")
+                if r_t.status_code == 200:
+                    todos = r_t.json().get("todos", [])
+                    active_todos = [t for t in todos if t.get("status") in ("open", "claimed", "in_progress")]
+                    ctx_parts.append(f"【项目TODO({len(active_todos)}个活跃)】:")
+                    for t in active_todos[:6]:
+                        ctx_parts.append(
+                            f"  - [{t.get('status','?')}] {t.get('title','?')} "
+                            f"(负责人:{t.get('assigned_to','无')}) "
+                            f"优先级:{t.get('priority','?')}"
+                        )
+            except Exception as e:
+                ctx_parts.append(f"【TODO获取失败】: {e}")
 
     except Exception as e:
         ctx_parts.append(f"【项目信息获取失败】: {e}")
     return "\n".join(ctx_parts) if ctx_parts else ""
+
+
+# ── Cached fetch wrappers ──
+async def fetch_society_context_cached() -> str:
+    """Cached version of fetch_society_context with 5-min TTL."""
+    now = time.time()
+    cached = _context_cache["society"]
+    if cached["text"] and now < cached["expires"]:
+        return cached["text"]
+    text = await fetch_society_context()
+    _context_cache["society"] = {"text": text, "expires": now + CONTEXT_CACHE_TTL}
+    return text
+
+
+async def fetch_project_context_cached(project_id: str) -> str:
+    """Cached version of fetch_project_context with 5-min TTL."""
+    if not project_id:
+        return ""
+    now = time.time()
+    cached = _context_cache["project"].get(project_id)
+    if cached and cached["text"] and now < cached["expires"]:
+        return cached["text"]
+    text = await fetch_project_context(project_id)
+    _context_cache["project"][project_id] = {"text": text, "expires": now + CONTEXT_CACHE_TTL}
+    return text
 
 
 # ─── Core: Agent Loop ───
@@ -232,13 +270,14 @@ async def run_agent_loop(system_prompt: str, user_input: str, max_turns: int = 1
     )
 
 
-
 # ═══════════════════════════════════════════════════════════════
-#  Session Management - per-project persistent memory
+#  Session Management - per-project persistent memory (token-budgeted)
 # ═══════════════════════════════════════════════════════════════
 _sessions: dict = {}  # {project_id: {"history": [{"role","content","sender"}], "last_updated": float}}
 SESSION_TTL = 3600    # seconds; expired sessions are pruned
-MAX_SESSION_HISTORY = 50
+MAX_SESSION_HISTORY = 20    # ← Reduced from 50 to prevent context explosion
+MAX_HISTORY_TOKENS = 4000   # Token budget for history in system prompt
+RECENT_MESSAGES_FULL = 5    # Recent messages kept in full detail
 
 
 def _prune_sessions():
@@ -249,16 +288,69 @@ def _prune_sessions():
         del _sessions[k]
 
 
-def _build_history_block(project_id: str) -> str:
-    """Format session history as readable block for system prompt."""
+def _compress_history(project_id: str, token_budget: int = MAX_HISTORY_TOKENS) -> str:
+    """Format session history with token budget enforcement.
+
+    - Recent N messages: full content
+    - Older messages: one-line summaries
+    - Total token count capped at budget
+    """
     sess = _sessions.get(project_id)
     if not sess or not sess["history"]:
         return ""
-    lines = []
-    for h in sess["history"]:
+
+    history = sess["history"]
+    total_msgs = len(history)
+
+    if total_msgs <= RECENT_MESSAGES_FULL:
+        # All messages are recent, just format them
+        lines = [f"[{h.get('sender', h['role'])}]: {h['content']}" for h in history]
+        result = "\n".join(lines)
+        if _estimate_tokens(result) <= token_budget:
+            return result
+        # Even few messages exceed budget - truncate from oldest
+        return _truncate_lines(lines, token_budget)
+
+    # Split into older summaries + recent full
+    older = history[:-RECENT_MESSAGES_FULL]
+    recent = history[-RECENT_MESSAGES_FULL:]
+
+    older_summaries = []
+    for h in older:
         sender = h.get("sender", h["role"])
-        lines.append(f"[{sender}]: {h['content']}")
-    return "\n".join(lines)
+        content = h["content"].replace('\n', ' ')
+        summary = content[:50] + ("..." if len(content) > 50 else "")
+        older_summaries.append(f"[{sender}]: {summary}")
+
+    recent_lines = [f"[{h.get('sender', h['role'])}]: {h['content']}" for h in recent]
+
+    # Build with budget: 30% for older summaries, 70% for recent
+    older_budget = int(token_budget * 0.3)
+    recent_budget = token_budget - older_budget
+
+    older_text = _truncate_lines(older_summaries, older_budget) if older_summaries else ""
+    recent_text = _truncate_lines(recent_lines, recent_budget)
+
+    parts = []
+    if older_text:
+        parts.append(f"【较早对话摘要】\n{older_text}")
+    if recent_text:
+        parts.append(f"【最近对话】\n{recent_text}")
+    return "\n\n".join(parts)
+
+
+def _truncate_lines(lines: list, token_budget: int) -> str:
+    """Keep as many lines as fit within token budget, prioritizing recent (last)."""
+    result = []
+    budget_used = 0
+    for line in reversed(lines):
+        line_tokens = _estimate_tokens(line)
+        if budget_used + line_tokens <= token_budget:
+            result.insert(0, line)
+            budget_used += line_tokens
+        else:
+            break
+    return "\n".join(result)
 
 
 # ─── API Endpoints ───
@@ -277,14 +369,15 @@ async def health():
 @app.post("/api/chat/completion")
 async def chat_completion(req: ChatRequest):
     """Main endpoint called by platform bridge_router.
-    
+
     Platform sends incremental messages + project_id.
     Bridge maintains per-project session history and injects it into system prompt.
+    Context is cached with TTL to reduce API calls and context size.
     """
     try:
         project_id = req.project_id or "default"
         _prune_sessions()
-        
+
         # ── Build user_input from incremental messages ──
         user_input_parts = []
         for m in req.messages:
@@ -294,18 +387,18 @@ async def chat_completion(req: ChatRequest):
             user_input_parts.append(f"[{sender}]: {msg_content}")
         user_input = "\n".join(user_input_parts) if user_input_parts else "你好"
 
-        # ── Fetch context and build system prompt ──
-        context = await fetch_society_context()
-        project_context = await fetch_project_context(project_id)
+        # ── Fetch context (cached) and build system prompt ──
+        context = await fetch_society_context_cached()
+        project_context = await fetch_project_context_cached(project_id)
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             agent_name=AGENT_NAME, project_context=project_context, context=context
         )
-        
-        # ── Inject per-project conversation history into system prompt ──
-        history_block = _build_history_block(project_id)
+
+        # ── Inject compressed per-project conversation history ──
+        history_block = _compress_history(project_id)
         if history_block:
             system_prompt = (
-                f"以下是本项目中你之前参与的对话历史（最近{MAX_SESSION_HISTORY}条）：\n"
+                f"以下是本项目中你之前参与的对话历史（压缩摘要+最近详情）：\n"
                 f"{history_block}\n\n"
                 + system_prompt
             )
@@ -352,14 +445,39 @@ async def ws_chat(ws: WebSocket):
             data = await ws.receive_text()
             msg = json.loads(data) if isinstance(data, str) else data
             user_input = msg.get("content", data if isinstance(data, str) else "")
-
-            context = await fetch_society_context()
             ws_project_id = msg.get("project_id", "default")
-            project_context = await fetch_project_context(ws_project_id)
+
+            context = await fetch_society_context_cached()
+            project_context = await fetch_project_context_cached(ws_project_id)
             system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
                 agent_name=AGENT_NAME, project_context=project_context, context=context
             )
+
+            # Inject compressed history
+            history_block = _compress_history(ws_project_id)
+            if history_block:
+                system_prompt = (
+                    f"以下是本项目中你之前参与的对话历史（压缩摘要+最近详情）：\n"
+                    f"{history_block}\n\n"
+                    + system_prompt
+                )
+
             reply = await run_agent_loop(system_prompt, user_input)
+
+            # Store this interaction in session
+            if ws_project_id not in _sessions:
+                _sessions[ws_project_id] = {"history": [], "last_updated": time.time()}
+            sess = _sessions[ws_project_id]
+            sender = msg.get("sender_name", msg.get("sender", "user"))
+            sess["history"].append({
+                "role": "user", "content": user_input, "sender": sender,
+            })
+            sess["history"].append({
+                "role": "assistant", "content": reply, "sender": AGENT_NAME,
+            })
+            if len(sess["history"]) > MAX_SESSION_HISTORY:
+                sess["history"] = sess["history"][-MAX_SESSION_HISTORY:]
+            sess["last_updated"] = time.time()
 
             await ws.send_text(json.dumps({
                 "type": "agent_reply",

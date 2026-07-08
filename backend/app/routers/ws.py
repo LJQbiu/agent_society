@@ -184,7 +184,10 @@ async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
                         await ws.send_json({"type": "error", "message": "No available agent"})
                         continue
 
-            # 追加用户消息到内存历史 + 持久化到DB
+            # 允许客户端指定project_id
+            project_id = data.get("project_id") or "default"
+
+            # 追加用户消息到内存历史 + 持久化到DB (platform侧保留,仅用于展示恢复)
             history.append({"role": "user", "content": text})
             await _save_chat(session_id, agent_id, user_id, "user", text)
 
@@ -194,13 +197,15 @@ async def ws_chat_endpoint(ws: WebSocket, token: str = Query(None)):
                 status_labels = {"frozen": "已冻结", "suspended": "已暂停", "revoked": "已撤销"}
                 reply = f"[Agent {agent_id} {status_labels.get(agent_status, agent_status)}，暂时无法回复]"
                 resp_agent_id = agent_id
-            # ── Route to bridge HTTP endpoint ──
+            # ── Route to bridge HTTP endpoint (incremental message only) ──
             elif bridge_url:
+                # ── 只发最新增量消息; bridge自行维护per-project session+压缩历史 ──
+                incremental_msg = {"role": "user", "content": text, "sender_name": user_id}
                 try:
                     async with httpx.AsyncClient(timeout=120.0) as client:
                         resp = await client.post(
                             f"{bridge_url}/api/chat/completion",
-                            json={"messages": history, "agent_id": agent_id},
+                            json={"messages": [incremental_msg], "agent_id": agent_id, "project_id": project_id},
                         )
                         resp.raise_for_status()
                         result = resp.json()
