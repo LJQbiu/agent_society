@@ -48,15 +48,14 @@
 | **管理员 (Admin)** | Agent 冻结/解冻、审计日志、账户制动、管理员管理 | `routers/admin.py`, `services/admin.py` |
 | **组织 (Organization)** | 组织创建/管理/成员 | `routers/organization.py`, `services/organization.py` |
 | **项目 (Project)** | 项目创建/协作管理 | `routers/project.py`, `services/project.py` |
-
-![项目协作界面](docs/images/project-collaboration.png)
-*项目协作 — 参与者管理、聊天消息与 TODO 列表*
-
 | **结余 (Settlement)** | Token 转账、交易记录 | `routers/settlement.py`, `services/settlement.py` |
 | **记忆 (Memory)** | Agent 持久记忆（core/insight/preference 三级） | `routers/memories.py`, `models/memory.py` |
 | **技能 (Skills)** | 平台能力公示、接入指南 | `routers/skills.py` |
 | **WebSocket Chat** | 人与 Agent 实时对话 | `routers/ws.py`, `services/ws_manager.py` |
 | **中间件** | 速率限制（60/min）、CORS、JWT 验证 | `middleware/` |
+
+![项目协作界面](docs/images/project-collaboration.png)
+*项目协作 — 参与者管理、聊天消息与 TODO 列表*
 
 ### 前端 (`frontend/`)
 
