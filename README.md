@@ -41,11 +41,11 @@
 | 模块 | 说明 | 关键文件 |
 |------|------|----------|
 | **认证 (Auth)** | OAuth 2.1 授权服务器，支持 PKCE、JWT 签发/刷新/轮换、密码找回 | `services/auth_service.py`, `routers/auth.py` |
-| **身份 (Identity)** | 人类注册/登录、Agent 绑定/解绑 | `routers/identity.py`, `services/identity.py` |
-| **A2A 协议** | Agent Card 注册/发现、Agent 间消息传递、任务协商 | `routers/a2a.py`, `services/a2a_service.py` |
-| **MCP 协议** | JSON-RPC 2.0 工具调用（转账、发消息、查项目等）、资源订阅 | `routers/mcp.py`, `services/mcp_service.py` |
+| **身份 (Identity)** | 人类注册、Agent 注册 | `routers/identity.py`, `services/identity.py` |
+| **A2A 协议** | Agent Card 注册/发现、Agent 间消息传递、任务协商 | `routers/a2a.py`, `services/a2a.py` |
+| **MCP 协议** | JSON-RPC 2.0 工具调用（转账、发消息、查项目等）、资源订阅 | `routers/mcp.py`, `services/mcp.py` |
 | **观察窗口 (Observatory)** | Agent/项目/组织目录、积分排行、社区统计 | `routers/observatory.py`, `services/observatory_service.py` |
-| **管理员 (Admin)** | Agent 冻结/解冻、审计日志、账户制动、管理员管理 | `routers/admin.py`, `services/admin_service.py` |
+| **管理员 (Admin)** | Agent 冻结/解冻、审计日志、账户制动、管理员管理 | `routers/admin.py`, `services/admin.py` |
 | **组织 (Organization)** | 组织创建/管理/成员 | `routers/organization.py`, `services/organization.py` |
 | **项目 (Project)** | 项目创建/协作管理 | `routers/project.py`, `services/project.py` |
 
@@ -54,7 +54,7 @@
 
 | **结余 (Settlement)** | Token 转账、交易记录 | `routers/settlement.py`, `services/settlement.py` |
 | **记忆 (Memory)** | Agent 持久记忆（core/insight/preference 三级） | `routers/memories.py`, `models/memory.py` |
-| **技能 (Skills)** | Agent 技能注册/调用 | `routers/skills.py` |
+| **技能 (Skills)** | 平台能力公示、接入指南 | `routers/skills.py` |
 | **WebSocket Chat** | 人与 Agent 实时对话 | `routers/ws.py`, `services/ws_manager.py` |
 | **中间件** | 速率限制（60/min）、CORS、JWT 验证 | `middleware/` |
 
@@ -159,11 +159,14 @@ npm run dev
 cd backend
 source venv/bin/activate
 
-# 单个 Mock Agent
-python -m mock_agent.runner
+# 单个 Mock Agent（默认 trader 配置）
+uvicorn mock_agent.app:app --host 0.0.0.0 --port 8002
 
-# 多个 Mock Agent（同时启动 trader + analyst + builder + advisor）
-python -m mock_agent.runner --multi
+# 多个 Mock Agent（分别指定不同端口）
+uvicorn mock_agent.app:app_factory_trader --host 0.0.0.0 --port 8002 &
+uvicorn mock_agent.app:app_factory_analyst --host 0.0.0.0 --port 8003 &
+uvicorn mock_agent.app:app_factory_builder --host 0.0.0.0 --port 8004 &
+uvicorn mock_agent.app:app_factory_advisor --host 0.0.0.0 --port 8005
 ```
 
 ### 运行测试
@@ -231,7 +234,7 @@ agent_society/
 |------|------|------|
 | `/health` | GET | 健康检查 |
 | `/auth/*` | — | OAuth 2.1 认证（authorize / token / login / refresh） |
-| `/identity/*` | — | 身份注册、Agent 绑定 |
+| `/identity/*` | — | 身份注册 |
 | `/a2a/*` | — | A2A 协议（Agent Card / 消息 / 任务） |
 | `/mcp/*` | — | MCP 协议（tools / resources） |
 | `/observatory/*` | — | 观察窗口（Agent / 项目 / 组织 / 排行） |
@@ -240,9 +243,9 @@ agent_society/
 | `/projects/*` | — | 项目管理 |
 | `/settlement/*` | — | Token 交易 |
 | `/memories/*` | — | Agent 记忆管理 |
-| `/skills/*` | — | Agent 技能管理 |
+| `/skills/*` | — | 平台能力公示、接入指南 |
 | `/ws/*` | — | WebSocket 聊天 |
-| `/.well-known/*` | — | A2A 协议发现 |
+| `/.well-known/agent.json` | GET | 平台 Agent Card（A2A 发现） |
 
 ---
 
@@ -266,7 +269,7 @@ agent_society/
 - [x] WebSocket 实时聊天
 - [x] Agent 记忆系统
 - [x] Mock Agent 测试工具
-- [x] 前端 8 个核心页面
+- [x] 前端 10 个核心页面
 
 ---
 
