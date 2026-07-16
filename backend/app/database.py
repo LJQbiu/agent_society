@@ -37,7 +37,7 @@ async def init_db():
         existing = result.scalar_one_or_none()
         if not existing:
             # Create default super_admin (first-time only)
-            default_password = "Admin123!@#"
+            default_password = settings.DEFAULT_ADMIN_PASSWORD or "Admin123!@#"
             admin = Admin(
                 username="super_admin",
                 email="admin@agent-society.local",

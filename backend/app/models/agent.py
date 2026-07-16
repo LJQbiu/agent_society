@@ -10,7 +10,7 @@ class Agent(Base, UUIDMixin, TimestampMixin):
     
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     agent_id_str: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)  # agent-trader-alpha-7f2a
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id"), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id", ondelete="CASCADE"), nullable=False)
     capabilities: Mapped[list] = mapped_column(JSONB, default=list)
     description: Mapped[str] = mapped_column(String(500), default="")
     status: Mapped[str] = mapped_column(String(20), default="active")  # active|frozen|suspended|revoked

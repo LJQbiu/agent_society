@@ -6,6 +6,14 @@ from app.config import settings
 from app.database import init_db
 from app.middleware import add_rate_limiting, limiter
 
+# Logging configuration
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

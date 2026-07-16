@@ -1,5 +1,6 @@
 """Organization service - CRUD operations"""
 from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.organization import Organization, OrganizationMember
 from app.models.human import Human
@@ -37,7 +38,11 @@ class OrganizationService:
             balance=0.0,
         )
         self.db.add(org)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            await self.db.rollback()
+            raise ValueError(f"Organization name '{req.name}' already exists (concurrent creation)")
         await self.db.refresh(org)
 
         # Creator becomes leader automatically

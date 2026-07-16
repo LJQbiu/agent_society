@@ -7,7 +7,10 @@ from app.models.agent import Agent
 from app.models.organization import Organization
 from app.schemas.settlement import TransferRequest, DepositRequest, HolderType
 import uuid
+import logging
 from app.services.ws_manager import manager
+
+_logger = logging.getLogger(__name__)
 
 
 class SettlementService:
@@ -160,8 +163,8 @@ class SettlementService:
                         str(to_agent.owner_id),
                         {"type": "balance_change", "data": {"holder_id": to_id, "holder_type": to_ht, "amount": req.amount, "transaction_id": str(tx.id)}}
                     )
-        except Exception:
-            pass  # WebSocket push failure should not affect the transaction
+        except Exception as e:
+            _logger.warning("WS push failed for transfer: %s", e)
 
         return tx
 
@@ -205,8 +208,8 @@ class SettlementService:
                         str(target_agent.owner_id),
                         {"type": "balance_change", "data": {"holder_id": resolved_id, "holder_type": ht, "amount": req.amount, "transaction_id": str(tx.id)}}
                     )
-        except Exception:
-            pass  # WebSocket push failure should not affect the transaction
+        except Exception as e:
+            _logger.warning("WS push failed for transfer: %s", e)
 
         return tx
 

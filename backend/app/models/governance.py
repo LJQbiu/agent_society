@@ -10,7 +10,7 @@ class GovernanceEvent(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "governance_events"
     
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("admins.id"), nullable=False)
+    actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("admins.id", ondelete="CASCADE"), nullable=False)
     actor_role: Mapped[str] = mapped_column(String(20), nullable=False)
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     target_type: Mapped[str] = mapped_column(String(20), nullable=False)  # agent|project|organization|account
@@ -24,7 +24,7 @@ class Admin(Base, UUIDMixin, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="auditor")  # super_admin|admin|auditor
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("admins.id"), nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("admins.id", ondelete="SET NULL"), nullable=True)
     last_login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class OAuthClient(Base, UUIDMixin, TimestampMixin):
@@ -34,7 +34,7 @@ class OAuthClient(Base, UUIDMixin, TimestampMixin):
     client_secret_hash: Mapped[str] = mapped_column(String(255), nullable=True)  # PKCE客户端可为空
     client_name: Mapped[str] = mapped_column(String(100), nullable=False)
     redirect_uris: Mapped[list] = mapped_column(JSONB, default=list)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     grant_types: Mapped[list] = mapped_column(JSONB, default=["authorization_code", "client_credentials"])
 
 class AuthorizationCode(Base, UUIDMixin):

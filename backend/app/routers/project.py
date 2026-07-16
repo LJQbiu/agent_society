@@ -129,76 +129,8 @@ async def list_project_messages(
     db: AsyncSession = Depends(get_db),
 ):
     """List A2A conversation messages between project participant agents"""
-    from uuid import UUID as UUIDType
-    from sqlalchemy import text
-
-    # 1. Get participant agent_ids, join with agents to get agent_id_str
-    query = text("""
-        SELECT a.agent_id_str, a.name
-        FROM project_participants pp
-        JOIN agents a ON pp.agent_id = a.id
-        WHERE pp.project_id = :project_id
-    """)
-    result = await db.execute(query, {"project_id": UUIDType(project_id)})
-    agent_map_rows = result.fetchall()
-
-    if not agent_map_rows:
-        return {"messages": [], "total": 0}
-
-    # Build agent_id_str -> name mapping
-    agent_id_strs = [row[0] for row in agent_map_rows]
-    agent_names = {row[0]: row[1] for row in agent_map_rows}
-
-    # 2. Query messages where BOTH from and to are project participants
-    msg_query = text("""
-        SELECT id, from_agent_id, to_agent_id, message_type, content, priority, status, created_at
-        FROM messages
-        WHERE from_agent_id IN :agent_ids AND to_agent_id IN :agent_ids
-        ORDER BY created_at DESC
-        LIMIT :limit OFFSET :offset
-    """)
-    # asyncpg doesn't support tuple params directly, use individual placeholders
-    placeholders = ", ".join([f"'{aid}'" for aid in agent_id_strs])
-    msg_query_str = f"""
-        SELECT id, from_agent_id, to_agent_id, message_type, content, priority, status, created_at
-        FROM messages
-        WHERE from_agent_id IN ({placeholders}) AND to_agent_id IN ({placeholders})
-        ORDER BY created_at DESC
-        LIMIT {limit} OFFSET {offset}
-    """
-    result = await db.execute(text(msg_query_str))
-    messages = result.fetchall()
-
-    # 3. Get total count
-    count_query_str = f"""
-        SELECT COUNT(*)
-        FROM messages
-        WHERE from_agent_id IN ({placeholders}) AND to_agent_id IN ({placeholders})
-    """
-    count_result = await db.execute(text(count_query_str))
-    total = count_result.scalar()
-
-    # 4. Build response with agent names
-    msg_list = []
-    for m in messages:
-        content = m[4] if m[4] else {}
-        # Extract text from content JSONB
-        text_content = content.get("text", "") if isinstance(content, dict) else str(content)
-        msg_list.append({
-            "message_id": str(m[0]),
-            "from_agent_id": m[1],
-            "from_agent_name": agent_names.get(m[1], m[1]),
-            "to_agent_id": m[2],
-            "to_agent_name": agent_names.get(m[2], m[2]),
-            "message_type": m[3],
-            "content": content,
-            "text": text_content,
-            "priority": m[5],
-            "status": m[6],
-            "created_at": m[7].isoformat() if m[7] else None,
-        })
-
-    return {"messages": msg_list, "total": total}
+    service = ProjectService(db)
+    return await service.list_project_a2a_messages(project_id, limit, offset)
 
 
 # ---- Chat Message Endpoints ----

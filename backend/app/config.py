@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""  # 外部可达地址, 留空则自动用HOST:PORT(仅限本地开发)
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 2
+    # Default super admin password (seed only — change immediately in production)
+    DEFAULT_ADMIN_PASSWORD: str = ""
     # LLM (OpenAI-compatible API)
     LLM_API_BASE: str = ""
     LLM_API_KEY: str = ""

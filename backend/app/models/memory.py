@@ -10,8 +10,8 @@ class AgentMemory(Base, UUIDMixin, TimestampMixin):
     """Agent持久记忆 — 3层分级: core/insight/preference"""
     __tablename__ = "agent_memories"
 
-    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False, index=True)
-    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True)
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     # None = agent全局记忆; 有值 = 项目上下文记忆
     category: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     # core: 核心身份/使命 (每条消息注入)

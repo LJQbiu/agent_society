@@ -19,6 +19,9 @@ from app.schemas.project import (
 )
 from uuid import UUID, uuid4
 from app.services.ws_manager import manager
+from sqlalchemy import func as sa_func
+
+_logger = logging.getLogger(__name__)
 
 
 class ProjectService:
@@ -80,6 +83,23 @@ class ProjectService:
                     return True
         return False
 
+    async def _get_participant_owners(self, project_id: UUID, status: str = "active") -> dict:
+        """Batch lookup: get all active participant agents' owner_ids for a project.
+        Replaces N+1 pattern with a single query."""
+        p_result = await self.db.execute(
+            select(ProjectParticipant.agent_id).where(
+                ProjectParticipant.project_id == project_id,
+                ProjectParticipant.status == status,
+            )
+        )
+        agent_ids = [row[0] for row in p_result.fetchall()]
+        if not agent_ids:
+            return {}
+        a_result = await self.db.execute(
+            select(Agent.id, Agent.owner_id).where(Agent.id.in_(agent_ids))
+        )
+        return {str(a.id): str(a.owner_id) for a in a_result.fetchall() if a.owner_id}
+
     async def create_project(self, req: ProjectCreate, current_user) -> ProjectResponse:
         """Create project, auto-add creator agent as leader"""
         agent_id = await self._resolve_agent_id(current_user)
@@ -116,12 +136,12 @@ class ProjectService:
         try:
             # Resolve the human owner of the creator agent
             agent_result = await self.db.execute(
-                select(Agent).where(Agent.id == agent_id)
+                select(Agent.id, Agent.owner_id).where(Agent.id == agent_id)
             )
-            agent_obj = agent_result.scalar_one_or_none()
-            if agent_obj and agent_obj.owner_id:
+            row = agent_result.one_or_none()
+            if row and row.owner_id:
                 await manager.send_to_user(
-                    str(agent_obj.owner_id),
+                    str(row.owner_id),
                     {
                         "type": "project_created",
                         "data": {
@@ -131,8 +151,8 @@ class ProjectService:
                         }
                     }
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.warning("WS push failed for project_created: %s", e)
 
         return ProjectResponse.model_validate(project)
 
@@ -163,8 +183,8 @@ class ProjectService:
             count_query = count_query.where(Project.status == status)
         if owner_id:
             count_query = count_query.join(Agent, Project.creator_id == Agent.id).where(Agent.owner_id == UUID(owner_id))
-        count_result = await self.db.execute(count_query)
-        total = len(count_result.scalars().all())
+        count_result = await self.db.execute(select(sa_func.count()).select_from(count_query.subquery()))
+        total = count_result.scalar() or 0
 
         return ProjectListResponse(
             projects=[ProjectResponse.model_validate(p) for p in projects],
@@ -193,31 +213,20 @@ class ProjectService:
 
         # WebSocket push: notify all active participants about project update
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_result = await self.db.execute(
-                    select(Agent).where(Agent.id == p.agent_id)
-                )
-                agent_obj = agent_result.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_updated",
-                            "data": {
-                                "project_id": str(pid),
-                                "name": project.name,
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_updated",
+                        "data": {
+                            "project_id": str(pid),
+                            "name": project.name,
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_updated: %s", e)
 
         return ProjectResponse.model_validate(project)
 
@@ -283,31 +292,20 @@ class ProjectService:
 
         # WebSocket push: notify all participants about new member joining
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_result = await self.db.execute(
-                    select(Agent).where(Agent.id == p.agent_id)
-                )
-                agent_obj = agent_result.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_member_joined",
-                            "data": {
-                                "project_id": str(pid),
-                                "agent_id": str(agent_id),
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_member_joined",
+                        "data": {
+                            "project_id": str(pid),
+                            "agent_id": str(agent_id),
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_member_joined: %s", e)
 
         return ProjectParticipantResponse.model_validate(participant)
 
@@ -359,32 +357,21 @@ class ProjectService:
 
         # WebSocket push: notify all participants about status change
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_result = await self.db.execute(
-                    select(Agent).where(Agent.id == p.agent_id)
-                )
-                agent_obj = agent_result.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_status_change",
-                            "data": {
-                                "project_id": str(pid),
-                                "new_status": req.new_status,
-                                "previous_status": current,
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_status_change",
+                        "data": {
+                            "project_id": str(pid),
+                            "new_status": req.new_status,
+                            "previous_status": current,
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_status_change: %s", e)
 
         return ProjectResponse.model_validate(project)
 
@@ -409,6 +396,72 @@ class ProjectService:
         )
 
     # ---- Chat Message Methods ----
+
+    async def list_project_a2a_messages(self, project_id: str, limit: int = 50, offset: int = 0) -> dict:
+        """List A2A conversation messages between project participant agents
+        (moved from raw SQL in router to service layer to avoid SQL injection)"""
+        from uuid import UUID as UUIDType
+        from app.models.a2a import Message
+
+        pid = UUIDType(project_id)
+
+        # 1. Get participant agent_ids, join with agents to get agent_id_str
+        p_result = await self.db.execute(
+            select(ProjectParticipant).where(ProjectParticipant.project_id == pid)
+        )
+        participants = p_result.scalars().all()
+        if not participants:
+            return {"messages": [], "total": 0}
+
+        agent_ids = [p.agent_id for p in participants]
+        a_result = await self.db.execute(
+            select(Agent).where(Agent.id.in_(agent_ids))
+        )
+        agents = a_result.scalars().all()
+        if not agents:
+            return {"messages": [], "total": 0}
+
+        agent_id_strs = [a.agent_id_str for a in agents]
+        agent_names = {a.agent_id_str: a.name for a in agents}
+
+        # 2. Query messages where BOTH from and to are project participants (using ORM, not raw SQL)
+        msg_query = select(Message).where(
+            Message.from_agent_id.in_(agent_id_strs),
+            Message.to_agent_id.in_(agent_id_strs),
+        ).order_by(Message.created_at.desc()).limit(limit).offset(offset)
+
+        result = await self.db.execute(msg_query)
+        messages = result.scalars().all()
+
+        # 3. Get total count
+        count_query = select(func.count()).select_from(
+            select(Message).where(
+                Message.from_agent_id.in_(agent_id_strs),
+                Message.to_agent_id.in_(agent_id_strs),
+            ).subquery()
+        )
+        total = await self.db.scalar(count_query) or 0
+
+        # 4. Build response with agent names
+        msg_list = []
+        for m in messages:
+            content = m.content or {}
+            text_content = content.get("text", "") if isinstance(content, dict) else str(content)
+            msg_list.append({
+                "message_id": str(m.id),
+                "from_agent_id": m.from_agent_id,
+                "from_agent_name": agent_names.get(m.from_agent_id, m.from_agent_id),
+                "to_agent_id": m.to_agent_id,
+                "to_agent_name": agent_names.get(m.to_agent_id, m.to_agent_id),
+                "message_type": m.message_type,
+                "content": content,
+                "text": text_content,
+                "priority": m.priority,
+                "status": m.status,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            })
+
+        return {"messages": msg_list, "total": total}
 
     async def send_chat_message(self, project_id: str, req: ChatMessageCreate, current_user) -> ChatMessageResponse:
         """Send a chat message in project (human or agent)"""
@@ -485,30 +538,21 @@ class ProjectService:
 
         # WebSocket push: notify all participants about new chat message
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_result = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
-                agent_obj = agent_result.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_chat_message",
-                            "data": {
-                                "project_id": str(pid),
-                                "sender_name": sender_name,
-                                "content": req.content,
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_chat_message",
+                        "data": {
+                            "project_id": str(pid),
+                            "sender_name": sender_name,
+                            "content": req.content,
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_chat_message: %s", e)
 
         # Trigger multi-agent auto-reply dialogue (background task)
         if req.sender_type == "human":
@@ -565,31 +609,22 @@ class ProjectService:
 
         # WebSocket push: notify all participants about new TODO
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_result = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
-                agent_obj = agent_result.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_todo_created",
-                            "data": {
-                                "project_id": str(pid),
-                                "todo_id": str(todo.id),
-                                "title": todo.title,
-                                "priority": todo.priority,
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_todo_created",
+                        "data": {
+                            "project_id": str(pid),
+                            "todo_id": str(todo.id),
+                            "title": todo.title,
+                            "priority": todo.priority,
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_todo_created: %s", e)
 
         return ProjectTodoResponse.model_validate(todo)
 
@@ -680,8 +715,19 @@ class ProjectService:
         if todo.status != "open":
             raise ValueError(f"Cannot claim TODO with status '{todo.status}'")
 
-        # Verify claiming agent is an active participant
+        # Verify claiming agent is an active participant and caller owns it
         agent_id = req.agent_id
+        if current_user.user_type == "human":
+            agent_verify = await self.db.execute(
+                select(Agent.id).where(Agent.id == agent_id, Agent.owner_id == UUID(current_user.sub))
+            )
+            if not agent_verify.scalar_one_or_none():
+                raise ValueError("You can only claim TODOs with your own agent")
+        elif current_user.user_type == "agent":
+            resolved = await self._resolve_agent_id(current_user)
+            if agent_id != resolved:
+                raise ValueError("You can only claim TODOs for yourself")
+
         p_result = await self.db.execute(
             select(ProjectParticipant).where(
                 ProjectParticipant.project_id == pid,
@@ -707,37 +753,27 @@ class ProjectService:
 
         # WebSocket push: notify all participants about TODO claimed
         try:
-            participants_result = await self.db.execute(
-                select(ProjectParticipant).where(
-                    ProjectParticipant.project_id == pid,
-                    ProjectParticipant.status == "active",
-                )
-            )
-            participants = participants_result.scalars().all()
-            for p in participants:
-                agent_res = await self.db.execute(select(Agent).where(Agent.id == p.agent_id))
-                agent_obj = agent_res.scalar_one_or_none()
-                if agent_obj and agent_obj.owner_id:
-                    await manager.send_to_user(
-                        str(agent_obj.owner_id),
-                        {
-                            "type": "project_todo_claimed",
-                            "data": {
-                                "project_id": str(pid),
-                                "todo_id": str(tid),
-                                "claimed_by_name": resp.claimed_by_name,
-                            }
+            owner_map = await self._get_participant_owners(pid)
+            for uid in owner_map.values():
+                await manager.send_to_user(
+                    uid,
+                    {
+                        "type": "project_todo_claimed",
+                        "data": {
+                            "project_id": str(pid),
+                            "todo_id": str(tid),
+                            "claimed_by_name": resp.claimed_by_name,
                         }
-                    )
-        except Exception:
-            pass
+                    }
+                )
+        except Exception as e:
+            _logger.warning("WS push failed for project_todo_claimed: %s", e)
 
         return resp
 
 
 
 # ─── Multi-Agent Auto-Reply Dialogue ───
-_logger = logging.getLogger(__name__)
 _running_dialogues: set[str] = set()  # debounce: prevent overlapping tasks
 _agent_last_seen: dict[str, dict[str, datetime]] = {}  # {project_id: {agent_id_str: last_seen_datetime}}
 
@@ -868,32 +904,24 @@ async def _trigger_multi_agent_dialogue(project_id: str, rounds: int = 3):
                     # Push via WebSocket to all project participants
                     try:
                         all_p_result = await db.execute(
-                            select(ProjectParticipant).where(
-                                ProjectParticipant.project_id == UUID(project_id),
-                                ProjectParticipant.status == "active",
-                            )
+                            select(Agent.id, Agent.owner_id).where(Agent.id.in_(agent_ids))
                         )
-                        all_participants = all_p_result.scalars().all()
-                        for p in all_participants:
-                            agt = await db.execute(
-                                select(Agent).where(Agent.id == p.agent_id)
-                            )
-                            agent_obj = agt.scalar_one_or_none()
-                            if agent_obj and agent_obj.owner_id:
-                                await manager.send_to_user(
-                                    str(agent_obj.owner_id),
-                                    {
-                                        "type": "project_chat_message",
-                                        "data": {
-                                            "project_id": project_id,
-                                            "sender_name": agent.name,
-                                            "sender_type": "agent",
-                                            "content": reply_text,
-                                        }
+                        owner_map = {str(a.id): str(a.owner_id) for a in all_p_result.fetchall() if a.owner_id}
+                        for uid in owner_map.values():
+                            await manager.send_to_user(
+                                uid,
+                                {
+                                    "type": "project_chat_message",
+                                    "data": {
+                                        "project_id": project_id,
+                                        "sender_name": agent.name,
+                                        "sender_type": "agent",
+                                        "content": reply_text,
                                     }
-                                )
-                    except Exception:
-                        pass
+                                }
+                            )
+                    except Exception as e:
+                        _logger.warning("WS push failed in dialogue: %s", e)
 
                     # Delay between agent responses
                     await asyncio.sleep(2)

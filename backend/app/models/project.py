@@ -17,8 +17,8 @@ class Project(Base, UUIDMixin, TimestampMixin):
     reputation_budget: Mapped[float] = mapped_column(Float, default=0.0)
     required_capabilities: Mapped[list] = mapped_column(JSONB, default=list)
     max_participants: Mapped[int] = mapped_column(Integer, default=5)
-    creator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"))
-    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    creator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
     
     participants = relationship("ProjectParticipant", back_populates="project")
     organization = relationship("Organization", back_populates="projects")
@@ -28,8 +28,8 @@ class Project(Base, UUIDMixin, TimestampMixin):
 class ProjectParticipant(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "project_participants"
     
-    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"))
-    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"))
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(20), default="member")  # leader|member|applicant
     status: Mapped[str] = mapped_column(String(20), default="active")
     contribution_score: Mapped[float] = mapped_column(Float, default=0.0)
@@ -41,7 +41,7 @@ class ProjectChatMessage(Base, UUIDMixin, TimestampMixin):
     """项目聊天消息 - 人类与Agent之间的对话"""
     __tablename__ = "project_chat_messages"
     
-    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"))
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"))
     sender_type: Mapped[str] = mapped_column(String(10), nullable=False)  # human|agent
     sender_id: Mapped[str] = mapped_column(String(100), nullable=False)  # agent_id or user_id
     sender_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -58,8 +58,8 @@ class ProjectTodo(Base, UUIDMixin, TimestampMixin):
     description: Mapped[str] = mapped_column(String(1000), default="")
     priority: Mapped[str] = mapped_column(String(10), default="medium")  # high|medium|low
     status: Mapped[str] = mapped_column(String(20), default="open")  # open|claimed|in_progress|completed|cancelled
-    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)  # agent_id of leader
-    claimed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
+    claimed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     
     project = relationship("Project", back_populates="todos")

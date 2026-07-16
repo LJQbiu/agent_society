@@ -54,37 +54,44 @@ class ObservatoryService:
         agents = rows.all()
 
         # Build response with project count + org info via subqueries
+        agent_ids = [a.id for a in agents]
+
+        # Batch query: project counts for all agents
+        proj_counts_raw = await self.db.execute(
+            select(ProjectParticipant.agent_id, func.count(ProjectParticipant.id)) \
+            .where(ProjectParticipant.agent_id.in_(agent_ids)) \
+            .where(ProjectParticipant.status == "active") \
+            .group_by(ProjectParticipant.agent_id)
+        )
+        proj_count_map = {str(row[0]): row[1] for row in proj_counts_raw.fetchall()}
+
+        # Batch query: org memberships for all agents
+        org_memberships_raw = await self.db.execute(
+            select(OrganizationMember.agent_id, Organization.name, Organization.id) \
+            .join(Organization, OrganizationMember.organization_id == Organization.id) \
+            .where(OrganizationMember.agent_id.in_(agent_ids)) \
+            .where(OrganizationMember.status == "active")
+        )
+        org_map = {}
+        for row in org_memberships_raw.fetchall():
+            # Keep first org found for each agent
+            if str(row[0]) not in org_map:
+                org_map[str(row[0])] = {"id": str(row[2]), "name": row[1]}
+
         agent_list = []
         for a in agents:
-            # Projects count for this agent
-            proj_count = await self.db.scalar(
-                select(func.count()).select_from(ProjectParticipant) \
-                .where(ProjectParticipant.agent_id == a.id) \
-                .where(ProjectParticipant.status == "active")
-            ) or 0
-
-            # Org membership - get the org name if agent belongs to one
-            org_member = await self.db.execute(
-                select(OrganizationMember, Organization.name, Organization.id) \
-                .join(Organization, OrganizationMember.organization_id == Organization.id) \
-                .where(OrganizationMember.agent_id == a.id) \
-                .where(OrganizationMember.status == "active") \
-                .limit(1)
-            )
-            org_row = org_member.first()
-            org_id = str(org_row[2]) if org_row else None
-            org_name = org_row[1] if org_row else None
-
+            aid = str(a.id)
+            org_info = org_map.get(aid, {})
             agent_list.append({
-                "agent_id": a.agent_id_str or str(a.id),
+                "agent_id": a.agent_id_str or aid,
                 "name": a.name,
                 "status": a.status,
                 "capabilities": a.capabilities or [],
                 "reputation_score": a.reputation or 0.0,
                 "token_balance": a.balance or 0.0,
-                "organization_id": org_id,
-                "organization_name": org_name,
-                "projects_count": proj_count,
+                "organization_id": org_info.get("id"),
+                "organization_name": org_info.get("name"),
+                "projects_count": proj_count_map.get(aid, 0),
                 "created_at": a.created_at.isoformat() if a.created_at else None,
                 "avatar_url": None,  # Phase1 feature
             })
@@ -171,30 +178,38 @@ class ObservatoryService:
         projects = rows.all()
 
         project_list = []
+
+        # Batch: participant counts per project
+        proj_ids = [p.id for p in projects]
+        p_count_raw = await self.db.execute(
+            select(ProjectParticipant.project_id, func.count(ProjectParticipant.id)) \
+            .where(ProjectParticipant.project_id.in_(proj_ids)) \
+            .where(ProjectParticipant.status == "active") \
+            .group_by(ProjectParticipant.project_id)
+        )
+        p_count_map = {str(row[0]): row[1] for row in p_count_raw.fetchall()}
+
+        # Batch: creator names
+        creator_ids = [p.creator_id for p in projects if p.creator_id]
+        creators_raw = await self.db.execute(
+            select(Agent.id, Agent.name).where(Agent.id.in_(creator_ids))
+        )
+        creator_name_map = {str(row[0]): row[1] for row in creators_raw.fetchall()}
+
         for p in projects:
-            # Current participants count
-            p_count = await self.db.scalar(
-                select(func.count(ProjectParticipant.id)) \
-                .where(ProjectParticipant.project_id == p.id) \
-                .where(ProjectParticipant.status == "active")
-            ) or 0
-
-            # Creator name
-            creator = await self.db.get(Agent, p.creator_id)
-            creator_name = creator.name if creator else "Unknown"
-
+            pid = str(p.id)
             project_list.append({
-                "project_id": str(p.id),
+                "project_id": pid,
                 "name": p.name,
                 "type": p.type or "general",
                 "status": p.status,
                 "required_capabilities": p.required_capabilities or [],
-                "current_participants": p_count,
+                "current_participants": p_count_map.get(pid, 0),
                 "max_participants": p.max_participants or 5,
                 "token_budget": p.budget or 0.0,
                 "reputation_budget": p.reputation_budget or 0.0,
-                "creator_id": str(p.creator_id),
-                "creator_name": creator_name,
+                "creator_id": str(p.creator_id) if p.creator_id else None,
+                "creator_name": creator_name_map.get(str(p.creator_id)) if p.creator_id else "Unknown",
                 "deadline": None,  # Phase1: add deadline field
                 "description": p.description or "",
                 "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -504,25 +519,26 @@ class ObservatoryService:
         agents = rows.all()
 
         rankings = []
-        for rank_idx, a in enumerate(agents, start=(page - 1) * page_size + 1):
-            # Get org name
-            org_member = await self.db.execute(
-                select(Organization.name) \
-                .join(OrganizationMember, Organization.id == OrganizationMember.organization_id) \
-                .where(OrganizationMember.agent_id == a.id) \
-                .where(OrganizationMember.status == "active") \
-                .limit(1)
-            )
-            org_name_row = org_member.first()
-            org_name = org_name_row[0] if org_name_row else None
 
+        # Batch: org names for all ranked agents
+        agent_ids = [a.id for a in agents]
+        org_names_raw = await self.db.execute(
+            select(OrganizationMember.agent_id, Organization.name) \
+            .join(Organization, Organization.id == OrganizationMember.organization_id) \
+            .where(OrganizationMember.agent_id.in_(agent_ids)) \
+            .where(OrganizationMember.status == "active")
+        )
+        org_name_map = {str(row[0]): row[1] for row in org_names_raw.fetchall()}
+
+        for rank_idx, a in enumerate(agents, start=(page - 1) * page_size + 1):
+            aid = str(a.id)
             rankings.append({
                 "rank": rank_idx,
-                "agent_id": a.agent_id_str or str(a.id),
+                "agent_id": a.agent_id_str or aid,
                 "name": a.name,
                 "reputation_score": a.reputation or 0.0,
                 "token_balance": a.balance or 0.0,
-                "organization_name": org_name,
+                "organization_name": org_name_map.get(aid),
                 "trend": "+0.0",  # Phase1: track historical ranking changes
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             })

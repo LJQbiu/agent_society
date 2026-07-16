@@ -16,7 +16,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     reputation: Mapped[float] = mapped_column(Float, default=50.0)
     balance: Mapped[float] = mapped_column(Float, default=0.0)  # Token余额
     charter: Mapped[dict] = mapped_column(JSONB, default=dict)
-    creator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id"))
+    creator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id", ondelete="CASCADE"), nullable=False)
     
     members = relationship("OrganizationMember", back_populates="organization")
     projects = relationship("Project", back_populates="organization")
@@ -24,9 +24,9 @@ class Organization(Base, UUIDMixin, TimestampMixin):
 class OrganizationMember(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "organization_members"
     
-    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
-    human_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id"))
-    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"))
+    human_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("humans.id", ondelete="CASCADE"))
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     role: Mapped[str] = mapped_column(String(20), default="member")  # leader|member|applicant
     status: Mapped[str] = mapped_column(String(20), default="active")
     

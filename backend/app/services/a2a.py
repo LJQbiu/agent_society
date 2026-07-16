@@ -1,5 +1,6 @@
 """A2A协议服务 - M0-d 完整实现"""
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select, func
@@ -25,6 +26,7 @@ class A2AService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._logger = logging.getLogger(f"{__name__}.A2AService")
 
     # === Agent Card ===
 
@@ -42,8 +44,8 @@ class A2AService:
             endpoints=card_data.get("endpoints", {}),
             metadata=card_data.get("metadata", {}),
             version=card_data.get("version", 1),
-            created_at=str(agent.created_at) if agent.created_at else None,
-            updated_at=str(agent.updated_at) if agent.updated_at else None,
+            created_at=agent.created_at.isoformat() if agent.created_at else None,
+            updated_at=agent.updated_at.isoformat() if agent.updated_at else None,
         )
 
     async def register_agent_card(self, agent_id: str, data: AgentRegistration, owner_id: str = None) -> AgentCardResponse:
@@ -299,8 +301,8 @@ class A2AService:
                         }
                     }
                 )
-        except Exception:
-            pass  # Push failure should not break message flow
+        except Exception as e:
+            self._logger.warning("WebSocket push failed for send_message: %s", e)
 
         return MessageResponse(
             message_id=str(message.id),
@@ -308,7 +310,7 @@ class A2AService:
             to_agent_id=message.to_agent_id,
             message_type=message.message_type,
             status=message.status,
-            created_at=str(message.created_at),
+            created_at=message.created_at.isoformat() if message.created_at else None,
         )
 
     async def get_inbound_messages(
@@ -354,7 +356,7 @@ class A2AService:
                 to_agent_id=m.to_agent_id,
                 message_type=m.message_type,
                 status=m.status,
-                created_at=str(m.created_at),
+                created_at=m.created_at.isoformat() if m.created_at else None,
             )
             for m in messages
         ]
@@ -400,7 +402,7 @@ class A2AService:
         return MessageStatusResponse(
             message_id=message_id,
             status=message.status,
-            timestamp=str(datetime.now(timezone.utc)),
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -458,8 +460,8 @@ class A2AService:
                     }
                 }
             )
-        except Exception:
-            pass
+        except Exception as e:
+            self._logger.warning("WebSocket push failed for task_new: %s", e)
 
         return TaskResponse(
             task_id=str(task.id),
@@ -473,8 +475,8 @@ class A2AService:
             status=task.status,
             priority=task.priority,
             deadline=task.deadline,
-            created_at=str(task.created_at),
-            updated_at=str(task.updated_at) if task.updated_at else None,
+            created_at=task.created_at.isoformat() if task.created_at else None,
+            updated_at=task.updated_at.isoformat() if task.updated_at else None,
         )
 
     async def get_tasks(self, agent_id: str, params: TaskListRequest) -> TaskListResponse:
@@ -521,8 +523,8 @@ class A2AService:
                     status=t.status,
                     priority=t.priority,
                     deadline=t.deadline,
-                    created_at=str(t.created_at),
-                    updated_at=str(t.updated_at) if t.updated_at else None,
+                    created_at=t.created_at.isoformat() if t.created_at else None,
+                    updated_at=t.updated_at.isoformat() if t.updated_at else None,
                 )
                 for t in tasks
             ],
@@ -585,15 +587,25 @@ class A2AService:
 
         # WebSocket push: notify the other party
         try:
-            other_agent_id = task.from_agent_id if current_user_sub != str(
-                (await self.db.execute(select(Agent).where(Agent.agent_id_str == task.from_agent_id))).scalar_one_or_none().owner_id
-            ) else task.to_agent_id
-            other_agent = (await self.db.execute(
-                select(Agent).where(Agent.agent_id_str == other_agent_id)
-            )).scalar_one_or_none()
-            if other_agent:
+            # Resolve both agents to determine the "other" party
+            from_result = await self.db.execute(
+                select(Agent.owner_id).where(Agent.agent_id_str == task.from_agent_id)
+            )
+            from_owner_row = from_result.one_or_none()
+            from_owner = str(from_owner_row.owner_id) if from_owner_row else None
+
+            if from_owner and current_user_sub != from_owner:
+                other_agent_id = task.to_agent_id
+            else:
+                other_agent_id = task.from_agent_id
+
+            other_result = await self.db.execute(
+                select(Agent.owner_id).where(Agent.agent_id_str == other_agent_id)
+            )
+            other_row = other_result.one_or_none()
+            if other_row and other_row.owner_id:
                 await manager.send_to_user(
-                    str(other_agent.owner_id),
+                    str(other_row.owner_id),
                     {
                         "type": "task_update",
                         "data": {
@@ -603,8 +615,8 @@ class A2AService:
                         }
                     }
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            self._logger.warning("WebSocket push failed for task_update: %s", e)
 
         return TaskResponse(
             task_id=str(task.id),
@@ -618,8 +630,8 @@ class A2AService:
             status=task.status,
             priority=task.priority,
             deadline=task.deadline,
-            created_at=str(task.created_at),
-            updated_at=str(task.updated_at) if task.updated_at else None,
+            created_at=task.created_at.isoformat() if task.created_at else None,
+            updated_at=task.updated_at.isoformat() if task.updated_at else None,
         )
 
     async def get_task_detail(self, task_id: str) -> TaskResponse:
@@ -643,6 +655,6 @@ class A2AService:
             status=task.status,
             priority=task.priority,
             deadline=task.deadline,
-            created_at=str(task.created_at),
-            updated_at=str(task.updated_at) if task.updated_at else None,
+            created_at=task.created_at.isoformat() if task.created_at else None,
+            updated_at=task.updated_at.isoformat() if task.updated_at else None,
         )
